@@ -102,26 +102,7 @@ export default function EditorPage() {
   };
 
   return (
-    <div className="flex flex-row h-full w-full overflow-hidden">
-      {/* Sol Sütun (Araçlar) */}
-      <aside className="w-72 flex-shrink-0 border-r bg-muted/30 p-4 flex flex-col gap-3 overflow-y-auto z-10">
-        <h3 className="text-lg font-headline font-semibold">Araçlar</h3>
-        <p className="text-sm text-muted-foreground">Stratejinizi oluşturmak için düğümleri tuvale ekleyin.</p>
-        <div className="flex flex-col gap-2 pt-4">
-            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('indicator')}>
-                <Rss className="mr-2 h-4 w-4 text-primary" /> İndikatör Ekle
-            </Button>
-            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('logic')}>
-                <GitBranch className="mr-2 h-4 w-4 text-primary" /> Mantık Ekle
-            </Button>
-            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('action')}>
-                <CircleDollarSign className="mr-2 h-4 w-4 text-primary" /> İşlem Ekle
-            </Button>
-        </div>
-      </aside>
-
-      {/* Sağ Sütun (Canvas) */}
-      <main className="flex-1 h-full relative">
+    <div className="w-full h-full relative">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -137,12 +118,25 @@ export default function EditorPage() {
           <Controls />
         </ReactFlow>
 
-        <div className="absolute top-4 right-4 z-10 space-x-2">
-            <Button onClick={handleCompile} variant="outline" className="bg-card/80 backdrop-blur-sm hover:bg-card">
+        <div className="absolute top-4 left-4 z-10 bg-card border p-2 rounded-lg shadow-xl flex flex-col gap-2 w-56">
+            <h3 className="text-md font-headline font-semibold px-2">Araçlar</h3>
+             <p className="text-xs text-muted-foreground px-2 pb-2">Stratejinizi oluşturmak için düğümleri tuvale ekleyin.</p>
+            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('indicator')}>
+                <Rss className="mr-2 h-4 w-4 text-primary" /> İndikatör Ekle
+            </Button>
+            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('logic')}>
+                <GitBranch className="mr-2 h-4 w-4 text-primary" /> Mantık Ekle
+            </Button>
+            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('action')}>
+                <CircleDollarSign className="mr-2 h-4 w-4 text-primary" /> İşlem Ekle
+            </Button>
+        </div>
+
+        <div className="absolute top-4 right-4 z-10 flex gap-2">
+            <Button onClick={handleCompile} variant="default" className="shadow-lg">
                 <Code className="mr-2 h-4 w-4" /> Derle
             </Button>
         </div>
-      </main>
     </div>
   );
 }

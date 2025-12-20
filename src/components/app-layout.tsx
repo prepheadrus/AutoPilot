@@ -99,6 +99,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </header>
           <main className={cn(
               "flex-1 overflow-auto bg-background",
+               // The editor page has its own padding/margin controls
               pathname === '/editor' ? "p-0" : "p-4 md:p-6"
             )}>
             {children}
