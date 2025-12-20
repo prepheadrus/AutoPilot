@@ -17,14 +17,10 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
-import { compileStrategy } from "@/lib/compiler";
-import { Code, GitBranch, Rss, CircleDollarSign, TrendingUp, Filter, Save } from "lucide-react";
+import { Code, Rss, GitBranch, CircleDollarSign } from "lucide-react";
 import { IndicatorNode } from "@/components/editor/nodes/IndicatorNode";
 import { LogicNode } from "@/components/editor/nodes/LogicNode";
 import { ActionNode } from "@/components/editor/nodes/ActionNode";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 const nodeTypes = {
   indicator: IndicatorNode,
@@ -33,9 +29,9 @@ const nodeTypes = {
 };
 
 const initialNodes: Node[] = [
-  { id: "1", type: "indicator", position: { x: 100, y: 100 }, data: { label: 'RSI İndikatörü', indicatorType: 'RSI', period: 14 } },
-  { id: "2", type: "logic", position: { x: 400, y: 100 }, data: { label: 'Değer 30 dan küçükse', operator: 'lt', value: 30 } },
-  { id: "3", type: "action", position: { x: 700, y: 100 }, data: { label: '100 USDT Al', actionType: 'BUY', amount: 100 } },
+  { id: "1", type: "indicator", position: { x: 100, y: 200 }, data: { label: 'RSI İndikatörü' } },
+  { id: "2", type: "logic", position: { x: 400, y: 200 }, data: { label: 'Değer 30 dan küçükse' } },
+  { id: "3", type: "action", position: { x: 700, y: 200 }, data: { label: '100 USDT Al' } },
 ];
 
 const initialEdges: Edge[] = [
@@ -43,36 +39,20 @@ const initialEdges: Edge[] = [
     { id: 'e2-3', source: '2', target: '3', animated: true, style: { strokeWidth: 2 } },
 ];
 
+let nodeIdCounter = 4;
+const getNewNodeId = () => `${nodeIdCounter++}`;
 
 export default function EditorPage() {
   const [nodes, setNodes] = useState<Node[]>(initialNodes);
   const [edges, setEdges] = useState<Edge[]>(initialEdges);
-  const { toast } = useToast();
 
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) =>
-      setNodes((nds) => {
-        // This is a workaround to update node data from custom node internal state
-        // A more robust solution would be to use a state management library
-        const updatedNodes = applyNodeChanges(changes, nds);
-        changes.forEach(change => {
-            if (change.type === 'select' && change.selected === false) {
-                 const node = updatedNodes.find(n => n.id === change.id);
-                 if (node && node.data.onDataChange) {
-                    const data = node.data.onDataChange();
-                    const finalNodes = updatedNodes.map(n => n.id === node.id ? {...n, data: {...n.data, ...data}} : n)
-                    setNodes(finalNodes)
-                 }
-            }
-        })
-        return updatedNodes;
-      }),
+    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
     [setNodes]
   );
 
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) =>
-      setEdges((eds) => applyEdgeChanges(changes, eds)),
+    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
     [setEdges]
   );
   const onConnect = useCallback(
@@ -80,78 +60,68 @@ export default function EditorPage() {
     [setEdges]
   );
 
-  let nodeIdCounter = 4;
-  const getNewNodeId = () => `${nodeIdCounter++}`;
+  const handleAddNode = (type: 'indicator' | 'logic' | 'action') => {
+    let label = "Yeni Düğüm";
+    if (type === 'indicator') label = "Yeni İndikatör";
+    if (type === 'logic') label = "Koşul";
+    if (type === 'action') label = "İşlem";
 
-  const nodeTemplates = [
-      { id: 'indicator', label: 'İndikatör', icon: Rss, type: 'indicator' },
-      { id: 'logic', label: 'Mantık', icon: GitBranch, type: 'logic' },
-      { id: 'action', label: 'İşlem', icon: CircleDollarSign, type: 'action' },
-      { id: 'price_filter', label: 'Fiyat Filtresi', icon: Filter, type: 'default' },
-      { id: 'trend_filter', label: 'Trend Filtresi', icon: TrendingUp, type: 'default' },
-  ];
-
-  const addNode = (nodeTemplate: typeof nodeTemplates[0]) => {
     const newNode: Node = {
       id: getNewNodeId(),
-      type: nodeTemplate.type,
+      type: type,
       position: {
         x: Math.random() * 400 + 200,
         y: Math.random() * 300 + 50,
       },
-      data: { label: nodeTemplate.label },
+      data: { label },
     };
     setNodes((nds) => nds.concat(newNode));
   };
   
   const handleCompile = () => {
-    const result = compileStrategy(nodes, edges);
-    console.log("Compile Result:", result);
+    if (nodes.length === 0) {
+      alert("Hata: Tuval boş!");
+      return;
+    }
+    if (edges.length === 0) {
+      alert("Hata: Düğümler arasında bağlantı yok!");
+      return;
+    }
 
-    if (result.valid) {
-      toast({
-        title: "Strateji Başarıyla Derlendi",
-        description: (
-          <ScrollArea className="h-40 mt-2">
-            <pre className="mt-2 w-[340px] rounded-md bg-black/80 p-4">
-              <code className="text-white">{JSON.stringify(result.strategy, null, 2)}</code>
-            </pre>
-          </ScrollArea>
-        ),
-      });
+    // Basic validation logic
+    const indicatorNode = nodes.find(n => n.type === 'indicator');
+    const logicNode = nodes.find(n => n.type === 'logic');
+    const actionNode = nodes.find(n => n.type === 'action');
+    
+    if (indicatorNode && logicNode && actionNode && edges.some(e => e.source === indicatorNode.id && e.target === logicNode.id) && edges.some(e => e.source === logicNode.id && e.target === actionNode.id)) {
+        console.log("Strateji Hazır:", { nodes, edges });
+        alert("Başarılı: Strateji bot için hazır!");
     } else {
-      toast({
-        variant: "destructive",
-        title: "Derleme Başarısız",
-        description: result.message,
-      });
+        alert("Hata: Akış mantıklı değil. Lütfen İndikatör -> Mantık -> İşlem şeklinde bağlayın.");
     }
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden border-t bg-background">
-      {/* Sol Panel: Araçlar */}
-      <aside className="w-72 flex-shrink-0 border-r bg-muted/30 p-4 space-y-4 flex flex-col z-10 overflow-y-auto">
-        <Card>
-            <CardHeader>
-                <CardTitle className="font-headline text-lg">Strateji: RSI Momentum</CardTitle>
-                <CardDescription>RSI aşırı satım bölgesindeyken alım yapar.</CardDescription>
-            </CardHeader>
-        </Card>
-
-        <h3 className="text-sm font-semibold text-muted-foreground px-2">DÜĞÜMLER</h3>
-        <div className="space-y-2">
-            {nodeTemplates.map(nodeType => (
-              <Button key={nodeType.id} variant="ghost" className="w-full justify-start" onClick={() => addNode(nodeType)}>
-                <nodeType.icon className="mr-2 h-4 w-4 text-primary" />
-                {nodeType.label} Ekle
-              </Button>
-            ))}
+    <div className="flex flex-row h-full w-full overflow-hidden">
+      {/* Sol Sütun (Araçlar) */}
+      <aside className="w-72 flex-shrink-0 border-r bg-muted/30 p-4 flex flex-col gap-3 overflow-y-auto z-10">
+        <h3 className="text-lg font-headline font-semibold">Araçlar</h3>
+        <p className="text-sm text-muted-foreground">Stratejinizi oluşturmak için düğümleri tuvale ekleyin.</p>
+        <div className="flex flex-col gap-2 pt-4">
+            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('indicator')}>
+                <Rss className="mr-2 h-4 w-4 text-primary" /> İndikatör Ekle
+            </Button>
+            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('logic')}>
+                <GitBranch className="mr-2 h-4 w-4 text-primary" /> Mantık Ekle
+            </Button>
+            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('action')}>
+                <CircleDollarSign className="mr-2 h-4 w-4 text-primary" /> İşlem Ekle
+            </Button>
         </div>
       </aside>
 
-      {/* Sağ Panel: Canvas */}
-      <main className="flex-1 w-full h-full relative">
+      {/* Sağ Sütun (Canvas) */}
+      <main className="flex-1 h-full relative">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -167,9 +137,10 @@ export default function EditorPage() {
           <Controls />
         </ReactFlow>
 
-        <div className="absolute top-4 right-4 space-x-2">
-            <Button onClick={handleCompile} variant="outline" className="bg-card/80 backdrop-blur-sm hover:bg-card"><Code className="mr-2 h-4 w-4" /> Derle</Button>
-            <Button><Save className="mr-2 h-4 w-4" /> Kaydet ve Yayınla</Button>
+        <div className="absolute top-4 right-4 z-10 space-x-2">
+            <Button onClick={handleCompile} variant="outline" className="bg-card/80 backdrop-blur-sm hover:bg-card">
+                <Code className="mr-2 h-4 w-4" /> Derle
+            </Button>
         </div>
       </main>
     </div>
