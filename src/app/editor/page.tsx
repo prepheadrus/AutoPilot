@@ -15,6 +15,7 @@ import {
 } from '@xyflow/react';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 import '@xyflow/react/dist/style.css';
 
@@ -53,6 +54,7 @@ export default function StrategyEditorPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isCompiling, setIsCompiling] = useState(false);
+  const { toast } = useToast();
 
   const onConnect = useCallback(
     (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
@@ -61,7 +63,7 @@ export default function StrategyEditorPage() {
 
   const addNode = (type: string, label: string) => {
     const id = `${Date.now()}`;
-    const newNode = {
+    const newNode: Node = {
       id,
       type,
       position: { x: Math.random() * 400 + 100, y: Math.random() * 400 + 100 },
@@ -72,7 +74,6 @@ export default function StrategyEditorPage() {
 
   const handleCompileAndRun = async () => {
     setIsCompiling(true);
-
     try {
       const response = await fetch('/api/run-bot', {
         method: 'POST',
