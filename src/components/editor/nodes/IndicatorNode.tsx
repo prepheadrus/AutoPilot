@@ -8,10 +8,10 @@ import { Rss } from 'lucide-react';
 
 export function IndicatorNode({ data }: NodeProps) {
   return (
-    <div className="bg-slate-800/80 border border-teal-500 rounded-lg shadow-xl w-64 text-white backdrop-blur-sm">
-      <div className="p-3 border-b border-teal-500/50">
+    <div className="bg-slate-800 border-2 border-slate-400 border-l-4 border-l-blue-500 rounded-lg shadow-xl w-64 text-white">
+      <div className="p-3 border-b border-slate-700">
         <div className="flex items-center gap-2">
-            <Rss className="h-5 w-5 text-teal-400" />
+            <Rss className="h-5 w-5 text-blue-400" />
             <div className="font-bold">Indicator</div>
         </div>
       </div>
@@ -34,7 +34,7 @@ export function IndicatorNode({ data }: NodeProps) {
             <Input id="period" type="number" defaultValue={14} className="bg-slate-700 border-slate-600 text-white" />
         </div>
       </div>
-      <Handle type="source" position={Position.Right} className="!bg-teal-400 w-3 h-3" />
+      <Handle type="source" position={Position.Right} className="!bg-blue-400 w-3 h-3" />
     </div>
   );
 }

@@ -23,7 +23,6 @@ import { IndicatorNode } from "@/components/editor/nodes/IndicatorNode";
 import { LogicNode } from "@/components/editor/nodes/LogicNode";
 import { ActionNode } from "@/components/editor/nodes/ActionNode";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const nodeTypes = {
@@ -33,14 +32,14 @@ const nodeTypes = {
 };
 
 const initialNodes: Node[] = [
-  { id: "1", type: "indicator", position: { x: 50, y: 150 }, data: {} },
-  { id: "2", type: "logic", position: { x: 400, y: 150 }, data: {} },
-  { id: "3", type: "action", position: { x: 750, y: 150 }, data: {} },
+  { id: "1", type: "indicator", position: { x: 100, y: 100 }, data: { label: 'RSI Indicator' } },
+  { id: "2", type: "logic", position: { x: 400, y: 100 }, data: { label: 'Value is Less Than 30' } },
+  { id: "3", type: "action", position: { x: 700, y: 100 }, data: { label: 'Buy 100 USDT' } },
 ];
 
 const initialEdges: Edge[] = [
-    { id: 'e1-2', source: '1', target: '2', animated: true, style: { strokeWidth: 2, stroke: '#60a5fa' } },
-    { id: 'e2-3', source: '2', target: '3', animated: true, style: { strokeWidth: 2, stroke: '#a78bfa' } },
+    { id: 'e1-2', source: '1', target: '2', animated: true, style: { strokeWidth: 2 } },
+    { id: 'e2-3', source: '2', target: '3', animated: true, style: { strokeWidth: 2 } },
 ];
 
 
@@ -123,13 +122,13 @@ export default function EditorPage() {
           nodeTypes={nodeTypes}
           fitView
           proOptions={{ hideAttribution: true }}
-          className="bg-card"
+          className="bg-background"
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
           <Controls />
         </ReactFlow>
         <div className="absolute top-4 left-4">
-            <Card className="w-72">
+            <Card className="w-72 bg-card/80 backdrop-blur-sm">
                 <CardHeader>
                     <CardTitle className="font-headline text-lg">Strategy: RSI Momentum</CardTitle>
                     <CardDescription>Buys when RSI is oversold.</CardDescription>
@@ -137,7 +136,7 @@ export default function EditorPage() {
             </Card>
         </div>
         <div className="absolute top-4 right-4 space-x-2">
-            <Button onClick={handleCompile} variant="outline"><Code className="mr-2 h-4 w-4" /> Compile</Button>
+            <Button onClick={handleCompile} variant="outline" className="bg-card/80 backdrop-blur-sm hover:bg-card"><Code className="mr-2 h-4 w-4" /> Compile</Button>
             <Button><Save className="mr-2 h-4 w-4" /> Save & Deploy</Button>
         </div>
         <div className="absolute bottom-4 left-4 space-y-2">
