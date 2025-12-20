@@ -47,7 +47,7 @@ const initialNodes: Node[] = [
   },
   { 
     id: '3', 
-    type: 'action', _
+    type: 'action',
     position: { x: 650, y: 150 }, 
     data: { label: 'Alış Emri', actionType: 'buy', amount: 100 } 
   },
