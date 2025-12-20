@@ -1,142 +1,142 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback } from 'react';
 import {
   ReactFlow,
-  Controls,
   Background,
-  applyNodeChanges,
-  applyEdgeChanges,
+  Controls,
   addEdge,
-  type Node,
-  type Edge,
-  type NodeChange,
-  type EdgeChange,
-  type Connection,
-  BackgroundVariant,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
-import { Button } from "@/components/ui/button";
-import { Code, Rss, GitBranch, CircleDollarSign } from "lucide-react";
-import { IndicatorNode } from "@/components/editor/nodes/IndicatorNode";
-import { LogicNode } from "@/components/editor/nodes/LogicNode";
-import { ActionNode } from "@/components/editor/nodes/ActionNode";
+  useNodesState,
+  useEdgesState,
+  Connection,
+  Edge,
+  MarkerType
+} from '@xyflow/react';
 
+import '@xyflow/react/dist/style.css';
+
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { compileStrategy } from '@/lib/compiler';
+
+import IndicatorNode from '@/components/editor/nodes/IndicatorNode';
+import LogicNode from '@/components/editor/nodes/LogicNode';
+import { ActionNode } from '@/components/editor/nodes/ActionNode';
+
+// Düğüm tiplerini tanıtıyoruz
 const nodeTypes = {
   indicator: IndicatorNode,
   logic: LogicNode,
   action: ActionNode,
 };
 
+// Başlangıç düğümleri (Boş gelmesin diye)
 const initialNodes: Node[] = [
-  { id: "1", type: "indicator", position: { x: 100, y: 200 }, data: { label: 'RSI İndikatörü' } },
-  { id: "2", type: "logic", position: { x: 400, y: 200 }, data: { label: 'Değer 30 dan küçükse' } },
-  { id: "3", type: "action", position: { x: 700, y: 200 }, data: { label: '100 USDT Al' } },
+  { 
+    id: '1', 
+    type: 'indicator', 
+    position: { x: 50, y: 150 }, 
+    data: { label: 'RSI İndikatörü', indicatorType: 'rsi', period: 14 } 
+  },
+  { 
+    id: '2', 
+    type: 'logic', 
+    position: { x: 350, y: 150 }, 
+    data: { label: 'Koşul', operator: 'lt', value: 30 } 
+  },
+  { 
+    id: '3', 
+    type: 'action', 
+    position: { x: 650, y: 150 }, 
+    data: { label: 'Alış Emri', actionType: 'buy', amount: 100 } 
+  },
 ];
 
 const initialEdges: Edge[] = [
-    { id: 'e1-2', source: '1', target: '2', animated: true, style: { strokeWidth: 2 } },
-    { id: 'e2-3', source: '2', target: '3', animated: true, style: { strokeWidth: 2 } },
+  { id: 'e1-2', source: '1', target: '2', animated: true, markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'e2-3', source: '2', target: '3', animated: true, markerEnd: { type: MarkerType.ArrowClosed } },
 ];
 
-let nodeIdCounter = 4;
-const getNewNodeId = () => `${nodeIdCounter++}`;
 
-export default function EditorPage() {
-  const [nodes, setNodes] = useState<Node[]>(initialNodes);
-  const [edges, setEdges] = useState<Edge[]>(initialEdges);
+export default function StrategyEditorPage() {
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const { toast } = useToast();
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    [setNodes]
-  );
-
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    [setEdges]
-  );
   const onConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge({ ...connection, animated: true, style: { strokeWidth: 2 } }, eds)),
-    [setEdges]
+    (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
+    [setEdges],
   );
 
-  const handleAddNode = (type: 'indicator' | 'logic' | 'action') => {
-    let label = "Yeni Düğüm";
-    if (type === 'indicator') label = "Yeni İndikatör";
-    if (type === 'logic') label = "Koşul";
-    if (type === 'action') label = "İşlem";
-
-    const newNode: Node = {
-      id: getNewNodeId(),
-      type: type,
-      position: {
-        x: Math.random() * 400 + 200,
-        y: Math.random() * 300 + 50,
+  const addNode = (type: string, label: string) => {
+    const id = (nodes.length + 1).toString();
+    const newNode = {
+      id,
+      type,
+      position: { 
+        x: window.innerWidth / 2 + Math.random() * 200 - 100, 
+        y: window.innerHeight / 3 + Math.random() * 200 - 100
       },
       data: { label },
     };
     setNodes((nds) => nds.concat(newNode));
   };
-  
-  const handleCompile = () => {
-    if (nodes.length === 0) {
-      alert("Hata: Tuval boş!");
-      return;
-    }
-    if (edges.length === 0) {
-      alert("Hata: Düğümler arasında bağlantı yok!");
-      return;
-    }
 
-    // Basic validation logic
-    const indicatorNode = nodes.find(n => n.type === 'indicator');
-    const logicNode = nodes.find(n => n.type === 'logic');
-    const actionNode = nodes.find(n => n.type === 'action');
+  const handleCompile = () => {
+    const result = compileStrategy(nodes, edges);
     
-    if (indicatorNode && logicNode && actionNode && edges.some(e => e.source === indicatorNode.id && e.target === logicNode.id) && edges.some(e => e.source === logicNode.id && e.target === actionNode.id)) {
-        console.log("Strateji Hazır:", { nodes, edges });
-        alert("Başarılı: Strateji bot için hazır!");
+    if (result.valid) {
+      console.log("Derlenmiş Strateji:", result.strategy);
+      toast({
+        title: "Başarılı!",
+        description: result.message,
+        variant: "default",
+      });
     } else {
-        alert("Hata: Akış mantıklı değil. Lütfen İndikatör -> Mantık -> İşlem şeklinde bağlayın.");
+      toast({
+        title: "Derleme Hatası",
+        description: result.message,
+        variant: "destructive",
+      });
     }
   };
 
   return (
-    <div className="w-full h-full relative">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          fitView
-          proOptions={{ hideAttribution: true }}
-          className="bg-background"
-        >
-          <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
-          <Controls />
-        </ReactFlow>
+    <div className="w-full h-[calc(100vh-4rem)] relative bg-slate-950">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        nodeTypes={nodeTypes}
+        fitView
+        className="bg-slate-950"
+      >
+        <Background color="#334155" gap={20} size={1} />
+        <Controls className="bg-slate-800 border-slate-700 fill-slate-300" />
+      </ReactFlow>
 
-        <div className="absolute top-4 left-4 z-10 bg-card border p-2 rounded-lg shadow-xl flex flex-col gap-2 w-56">
-            <h3 className="text-md font-headline font-semibold px-2">Araçlar</h3>
-             <p className="text-xs text-muted-foreground px-2 pb-2">Stratejinizi oluşturmak için düğümleri tuvale ekleyin.</p>
-            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('indicator')}>
-                <Rss className="mr-2 h-4 w-4 text-primary" /> İndikatör Ekle
-            </Button>
-            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('logic')}>
-                <GitBranch className="mr-2 h-4 w-4 text-primary" /> Mantık Ekle
-            </Button>
-            <Button variant="outline" className="justify-start" onClick={() => handleAddNode('action')}>
-                <CircleDollarSign className="mr-2 h-4 w-4 text-primary" /> İşlem Ekle
-            </Button>
-        </div>
+      {/* Yüzen Araç Paneli (Sol Üst) */}
+      <div className="absolute top-4 left-4 z-50 bg-card border p-3 rounded-lg shadow-xl flex flex-col gap-3 w-52">
+        <h3 className="font-bold text-center mb-1">Araç Kutusu</h3>
+        <Button onClick={() => addNode('indicator', 'Yeni İndikatör')} variant="outline">
+          📊 İndikatör Ekle
+        </Button>
+        <Button onClick={() => addNode('logic', 'Yeni Koşul')} variant="outline">
+          ⚡ Mantık/Koşul Ekle
+        </Button>
+        <Button onClick={() => addNode('action', 'Yeni İşlem')} variant="outline">
+          💰 İşlem (Al/Sat) Ekle
+        </Button>
+      </div>
 
-        <div className="absolute top-4 right-4 z-10 flex gap-2">
-            <Button onClick={handleCompile} variant="default" className="shadow-lg">
-                <Code className="mr-2 h-4 w-4" /> Derle
-            </Button>
-        </div>
+      {/* Yüzen Aksiyon Paneli (Sağ Üst) */}
+      <div className="absolute top-4 right-4 z-50 flex gap-2">
+        <Button onClick={handleCompile} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg">
+          ▶ Stratejiyi Derle
+        </Button>
+      </div>
     </div>
   );
 }
