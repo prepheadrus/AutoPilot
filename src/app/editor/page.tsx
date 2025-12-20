@@ -14,10 +14,7 @@ import {
   Node,
 } from '@xyflow/react';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-
-import '@xyflow/react/dist/style.css';
+import { Loader2, Terminal } from 'lucide-react';
 
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
@@ -54,26 +51,32 @@ export default function StrategyEditorPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isCompiling, setIsCompiling] = useState(false);
-  const { toast } = useToast();
+  const [logs, setLogs] = useState<string[]>([]);
 
   const onConnect = useCallback(
     (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
     [setEdges],
   );
 
-  const addNode = (type: string, label: string) => {
+  const addNode = (type: 'indicator' | 'logic' | 'action', label: string) => {
     const id = `${Date.now()}`;
+    let nodeLabel = "Yeni Düğüm";
+    if (type === 'indicator') nodeLabel = 'Yeni İndikatör';
+    if (type === 'logic') nodeLabel = 'Yeni Koşul';
+    if (type === 'action') nodeLabel = 'Yeni İşlem';
+    
     const newNode: Node = {
       id,
       type,
       position: { x: Math.random() * 400 + 100, y: Math.random() * 400 + 100 },
-      data: { label },
+      data: { label: nodeLabel },
     };
     setNodes((nds) => nds.concat(newNode));
   };
 
   const handleCompileAndRun = async () => {
     setIsCompiling(true);
+    setLogs(prev => [...prev, 'Strateji testi başlatılıyor...']);
     try {
       const response = await fetch('/api/run-bot', {
         method: 'POST',
@@ -85,23 +88,22 @@ export default function StrategyEditorPage() {
 
       const data = await response.json();
 
-      if (!response.ok) {
+      if (!response.ok || !data.success) {
         throw new Error(data.message || 'Bilinmeyen bir test hatası oluştu.');
       }
       
-      // Toast yerine window.alert kullanarak garantili geri bildirim
-      window.alert(`Test Sonucu:\n\n${data.message}`);
+      setLogs(prev => [...prev, `[BAŞARILI] ${data.message}`]);
 
     } catch (error) {
-       // Hata durumunda da window.alert kullan
-      window.alert(`Hata:\n\n${(error as Error).message}`);
+       setLogs(prev => [...prev, `[HATA] ${(error as Error).message}`]);
     } finally {
       setIsCompiling(false);
     }
   };
 
   return (
-    <div className="w-full h-[calc(100vh-4rem)] relative bg-slate-950">
+    <div className="w-full h-full flex flex-col bg-slate-950">
+      <div className="flex-1 relative">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -139,6 +141,22 @@ export default function StrategyEditorPage() {
             </Button>
              <Button variant="secondary">Kaydet</Button>
         </div>
+      </div>
+      
+      <div className="h-48 flex flex-col bg-black border-t border-slate-700">
+        <div className="flex items-center gap-2 p-2 border-b border-slate-800">
+            <Terminal className="h-5 w-5 text-muted-foreground" />
+            <h3 className="font-bold text-sm text-muted-foreground">Sistem Kayıtları</h3>
+        </div>
+        <div className="flex-1 p-4 font-mono text-sm overflow-y-auto text-green-400 space-y-1">
+          {logs.length === 0 && <p className="text-gray-500">Test sonuçları burada görünecektir...</p>}
+          {logs.map((log, index) => (
+            <p key={index} className={log.startsWith('[HATA]') ? 'text-red-400' : 'text-green-400'}>
+              {`> ${log}`}
+            </p>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
