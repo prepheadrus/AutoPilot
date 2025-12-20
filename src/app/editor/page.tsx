@@ -16,6 +16,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+
 import { Button } from '@/components/ui/button';
 import { Loader2, Terminal, Share2, GitBranch, Rss, CircleDollarSign } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
@@ -75,8 +76,8 @@ const Sidebar = () => {
     );
 };
 
-
-const StrategyBuilder = () => {
+// İçerik Bileşeni: Tüm React Flow mantığı burada
+function StrategyBuilder() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -105,7 +106,8 @@ const StrategyBuilder = () => {
       if (typeof type === 'undefined' || !type || !reactFlowWrapper.current) {
         return;
       }
-
+      
+      // mouse pozisyonunu react flow pozisyonuna çeviriyoruz
       const position = screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
@@ -116,12 +118,10 @@ const StrategyBuilder = () => {
       if (type === 'indicator') {
         nodeLabel = 'Yeni İndikatör';
         nodeData = { label: nodeLabel, indicatorType: 'rsi', period: 14 };
-      }
-      if (type === 'logic') {
+      } else if (type === 'logic') {
         nodeLabel = 'Yeni Koşul';
         nodeData = { label: nodeLabel, operator: 'lt', value: 30 };
-      }
-      if (type === 'action') {
+      } else if (type === 'action') {
         nodeLabel = 'Yeni İşlem';
         nodeData = { label: nodeLabel, actionType: 'buy', amount: 100 };
       }
@@ -224,6 +224,7 @@ const StrategyBuilder = () => {
   );
 }
 
+// Ana Sayfa Bileşeni: Sadece ReactFlowProvider ile sarmalar
 export default function StrategyEditorPage() {
     return (
         <div className="w-full h-full relative">
@@ -233,5 +234,3 @@ export default function StrategyEditorPage() {
         </div>
     );
 }
-
-    
