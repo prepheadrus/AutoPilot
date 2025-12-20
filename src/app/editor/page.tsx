@@ -15,8 +15,6 @@ import {
 } from '@xyflow/react';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
-import { compileStrategy } from '@/lib/compiler';
-import { runStrategy } from '@/lib/bot-engine'; // Bu importu kullanacağız
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
