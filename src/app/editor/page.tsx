@@ -129,9 +129,9 @@ export default function EditorPage() {
   };
 
   return (
-    <div className="flex h-full w-full border-t">
-      {/* Left Panel: Toolbar */}
-      <aside className="w-72 border-r bg-muted/30 p-4 space-y-4 flex flex-col">
+    <div className="flex h-full w-full overflow-hidden border-t bg-background">
+      {/* Sol Panel: Araçlar */}
+      <aside className="w-72 flex-shrink-0 border-r bg-muted/30 p-4 space-y-4 flex flex-col z-10 overflow-y-auto">
         <Card>
             <CardHeader>
                 <CardTitle className="font-headline text-lg">Strateji: RSI Momentum</CardTitle>
@@ -150,8 +150,8 @@ export default function EditorPage() {
         </div>
       </aside>
 
-      {/* Right Panel: Canvas */}
-      <main className="flex-1 relative">
+      {/* Sağ Panel: Canvas */}
+      <main className="flex-1 w-full h-full relative">
         <ReactFlow
           nodes={nodes}
           edges={edges}

@@ -100,7 +100,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <main className={cn(
               "flex-1 overflow-auto bg-background",
               // Remove padding for the editor page to allow it to fill the entire space
-              pathname !== '/editor' && "p-4 md:p-6"
+              pathname === '/editor' ? "p-0" : "p-4 md:p-6"
             )}>
             {children}
           </main>
