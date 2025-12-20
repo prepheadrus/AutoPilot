@@ -48,12 +48,12 @@ const recentTrades = [
 export default function DashboardPage() {
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-headline font-bold">Dashboard</h1>
+      <h1 className="text-3xl font-headline font-bold">Yönetim Paneli</h1>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total P&L</CardTitle>
+            <CardTitle className="text-sm font-medium">Toplam Kâr/Zarar</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -63,7 +63,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Bots</CardTitle>
+            <CardTitle className="text-sm font-medium">Aktif Botlar</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -73,7 +73,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Portfolio Value</CardTitle>
+            <CardTitle className="text-sm font-medium">Portföy Değeri</CardTitle>
             <BarChart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -83,7 +83,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">Kazanma Oranı</CardTitle>
             <LineChart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -96,7 +96,7 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-5">
         <Card className="md:col-span-3">
           <CardHeader>
-            <CardTitle className="font-headline">Portfolio Performance</CardTitle>
+            <CardTitle className="font-headline">Portföy Performansı</CardTitle>
              <CardDescription>7-day performance overview</CardDescription>
           </CardHeader>
           <CardContent>
@@ -116,7 +116,7 @@ export default function DashboardPage() {
         </Card>
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle className="font-headline">Asset Allocation</CardTitle>
+            <CardTitle className="font-headline">Varlık Dağılımı</CardTitle>
             <CardDescription>Current portfolio distribution</CardDescription>
           </CardHeader>
           <CardContent>
@@ -138,7 +138,7 @@ export default function DashboardPage() {
       
       <Card>
         <CardHeader>
-          <CardTitle className="font-headline">Recent Trades</CardTitle>
+          <CardTitle className="font-headline">Son İşlemler</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>

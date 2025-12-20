@@ -28,10 +28,10 @@ import { PlaceHolderImages } from "@/lib/placeholder-images";
 import type { ImagePlaceholder } from "@/lib/placeholder-images";
 
 const navItems = [
-  { href: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/editor", icon: Share2, label: "Strategy Editor" },
-  { href: "/bot-status", icon: Bot, label: "Bot Status" },
-  { href: "/settings", icon: Settings, label: "Settings" },
+  { href: "/", icon: LayoutDashboard, label: "Özet Panel" },
+  { href: "/editor", icon: Share2, label: "Strateji Editörü" },
+  { href: "/bot-status", icon: Bot, label: "Bot Yönetimi" },
+  { href: "/settings", icon: Settings, label: "Ayarlar" },
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
