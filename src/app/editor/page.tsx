@@ -53,7 +53,7 @@ const initialNodes: Node[] = [
 ];
 
 const Sidebar = () => {
-    const onDragStart = (event: DragEvent<HTMLButtonElement>, nodeType: string) => {
+    const onDragStart = (event: DragEvent<HTMLDivElement>, nodeType: string) => {
         if (event.dataTransfer) {
             event.dataTransfer.setData('application/reactflow', nodeType);
             event.dataTransfer.effectAllowed = 'move';
@@ -63,15 +63,15 @@ const Sidebar = () => {
     return (
         <aside className="absolute top-4 left-4 z-10 bg-card/80 backdrop-blur-sm border p-2 rounded-lg shadow-xl flex flex-col gap-2 w-56">
             <h3 className="font-bold px-2 py-1 text-sm text-foreground">Araç Kutusu</h3>
-             <Button variant="outline" size="sm" onDragStart={(event) => onDragStart(event, 'indicator')} draggable className="flex justify-start items-center gap-2 cursor-grab">
-                <Rss /> İndikatör
-            </Button>
-            <Button variant="outline" size="sm" onDragStart={(event) => onDragStart(event, 'logic')} draggable className="flex justify-start items-center gap-2 cursor-grab">
-                <GitBranch /> Mantık/Koşul
-            </Button>
-            <Button variant="outline" size="sm" onDragStart={(event) => onDragStart(event, 'action')} draggable className="flex justify-start items-center gap-2 cursor-grab">
-                <CircleDollarSign /> İşlem (Al/Sat)
-            </Button>
+             <div draggable onDragStart={(event) => onDragStart(event, 'indicator')} className="flex justify-start items-center gap-2 cursor-grab bg-background border rounded p-2 text-sm hover:bg-muted">
+                <Rss className="text-blue-500" /> İndikatör
+            </div>
+            <div draggable onDragStart={(event) => onDragStart(event, 'logic')} className="flex justify-start items-center gap-2 cursor-grab bg-background border rounded p-2 text-sm hover:bg-muted">
+                <GitBranch className="text-purple-500" /> Mantık/Koşul
+            </div>
+            <div draggable onDragStart={(event) => onDragStart(event, 'action')} className="flex justify-start items-center gap-2 cursor-grab bg-background border rounded p-2 text-sm hover:bg-muted">
+                <CircleDollarSign className="text-green-500" /> İşlem (Al/Sat)
+            </div>
         </aside>
     );
 };
@@ -82,7 +82,7 @@ function StrategyBuilder() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isCompiling, setIsCompiling] = useState(false);
-  const [logs, setLogs] = useState<string[]>(['> [SİSTEM] Editör başlatıldı. Sürükle & bırak özelliği aktif.']);
+  const [logs, setLogs] = useState<string[]>(['> [SİSTEM] Editör başlatıldı. Stratejinizi oluşturun veya test edin.']);
   const { screenToFlowPosition } = useReactFlow();
 
   const onConnect = useCallback(
@@ -107,7 +107,6 @@ function StrategyBuilder() {
         return;
       }
       
-      // mouse pozisyonunu react flow pozisyonuna çeviriyoruz
       const position = screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
@@ -208,6 +207,7 @@ function StrategyBuilder() {
         <div className="p-4 text-sm overflow-y-auto h-[calc(100%-49px)]">
           {logs.map((log, index) => (
             <p key={index} className={cn(
+              'whitespace-pre-wrap', // Ensures logs wrap correctly
               log.includes('[HATA]') && 'text-red-400',
               log.includes('[BAŞARILI]') && 'text-green-400',
               log.includes('[İSTEK]') && 'text-yellow-400',
