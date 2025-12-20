@@ -140,8 +140,29 @@ export default function EditorPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-57px)] -m-4 md:-m-6">
-      <div className="flex-grow rounded-lg text-card-foreground w-full h-full relative">
+    <div className="flex h-[calc(100vh-57px)] -m-4 md:-m-6 border-t">
+      {/* Left Panel: Toolbar */}
+      <div className="w-72 border-r bg-muted/30 p-4 space-y-4">
+        <Card>
+            <CardHeader>
+                <CardTitle className="font-headline text-lg">Strateji: RSI Momentum</CardTitle>
+                <CardDescription>RSI aşırı satım bölgesindeyken alım yapar.</CardDescription>
+            </CardHeader>
+        </Card>
+
+        <h3 className="text-sm font-semibold text-muted-foreground px-2">DÜĞÜMLER</h3>
+        <div className="space-y-2">
+            {nodeTemplates.map(nodeType => (
+              <Button key={nodeType.id} variant="ghost" className="w-full justify-start" onClick={() => addNode(nodeType)}>
+                <nodeType.icon className="mr-2 h-4 w-4 text-primary" />
+                {nodeType.label} Ekle
+              </Button>
+            ))}
+        </div>
+      </div>
+
+      {/* Right Panel: Canvas */}
+      <div className="flex-1 relative">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -156,25 +177,10 @@ export default function EditorPage() {
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
           <Controls />
         </ReactFlow>
-        <div className="absolute top-4 left-4">
-            <Card className="w-72 bg-card/80 backdrop-blur-sm">
-                <CardHeader>
-                    <CardTitle className="font-headline text-lg">Strateji: RSI Momentum</CardTitle>
-                    <CardDescription>RSI aşırı satım bölgesindeyken alım yapar.</CardDescription>
-                </CardHeader>
-            </Card>
-        </div>
+
         <div className="absolute top-4 right-4 space-x-2">
             <Button onClick={handleCompile} variant="outline" className="bg-card/80 backdrop-blur-sm hover:bg-card"><Code className="mr-2 h-4 w-4" /> Derle</Button>
             <Button><Save className="mr-2 h-4 w-4" /> Kaydet ve Yayınla</Button>
-        </div>
-        <div className="absolute bottom-4 left-4 space-y-2">
-            {nodeTemplates.map(nodeType => (
-              <Button key={nodeType.id} variant="secondary" size="sm" className="w-full justify-start" onClick={() => addNode(nodeType)}>
-                <nodeType.icon className="mr-2 h-4 w-4 text-muted-foreground" />
-                {nodeType.label} Ekle
-              </Button>
-            ))}
         </div>
       </div>
     </div>
