@@ -75,7 +75,7 @@ export default function StrategyEditorPage() {
       id,
       type,
       position: { 
-        x: window.innerWidth / 2 + Math.random() * 200 - 100, 
+        x: window.innerWidth / 3 + Math.random() * 200 - 100, 
         y: window.innerHeight / 3 + Math.random() * 200 - 100
       },
       data: { label },
@@ -103,7 +103,7 @@ export default function StrategyEditorPage() {
   };
 
   return (
-    <div className="w-full h-[calc(100vh-4rem)] relative bg-slate-950">
+    <div className="w-full h-full relative bg-slate-950">
       <ReactFlow
         nodes={nodes}
         edges={edges}

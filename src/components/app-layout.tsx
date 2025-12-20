@@ -92,15 +92,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </SidebarFooter>
         </Sidebar>
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <header className="flex items-center justify-between h-14 shrink-0 px-4 border-b md:justify-end">
+        <div className="flex flex-col flex-1 overflow-y-auto">
+          <header className="flex items-center justify-between h-14 shrink-0 px-4 border-b md:justify-end sticky top-0 bg-background z-20">
             <SidebarTrigger className="md:hidden" />
             <p className="text-sm text-muted-foreground">Algo Trading Platform</p>
           </header>
           <main className={cn(
               "flex-1 overflow-auto bg-background",
-               // The editor page has its own padding/margin controls
-              pathname === '/editor' ? "p-0" : "p-4 md:p-6"
+              pathname === '/editor' ? "p-0 h-[calc(100vh-3.5rem)]" : "p-4 md:p-6"
             )}>
             {children}
           </main>
