@@ -24,6 +24,8 @@ import { LogicNode } from "@/components/editor/nodes/LogicNode";
 import { ActionNode } from "@/components/editor/nodes/ActionNode";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const nodeTypes = {
   indicator: IndicatorNode,
@@ -32,9 +34,9 @@ const nodeTypes = {
 };
 
 const initialNodes: Node[] = [
-  { id: "1", type: "indicator", position: { x: 100, y: 100 }, data: { label: 'RSI Indicator' } },
-  { id: "2", type: "logic", position: { x: 400, y: 100 }, data: { label: 'Value is Less Than 30' } },
-  { id: "3", type: "action", position: { x: 700, y: 100 }, data: { label: 'Buy 100 USDT' } },
+  { id: "1", type: "indicator", position: { x: 100, y: 100 }, data: { label: 'RSI İndikatörü' } },
+  { id: "2", type: "logic", position: { x: 400, y: 100 }, data: { label: 'Değer 30 dan küçükse' } },
+  { id: "3", type: "action", position: { x: 700, y: 100 }, data: { label: '100 USDT Al' } },
 ];
 
 const initialEdges: Edge[] = [
@@ -67,11 +69,11 @@ export default function EditorPage() {
   const getNewNodeId = () => `${nodeIdCounter++}`;
 
   const nodeTemplates = [
-      { id: 'indicator', label: 'Indicator', icon: Rss, type: 'indicator' },
-      { id: 'logic', label: 'Logic', icon: GitBranch, type: 'logic' },
-      { id: 'action', label: 'Action', icon: CircleDollarSign, type: 'action' },
-      { id: 'price_filter', label: 'Price Filter', icon: Filter, type: 'default' },
-      { id: 'trend_filter', label: 'Trend Filter', icon: TrendingUp, type: 'default' },
+      { id: 'indicator', label: 'İndikatör', icon: Rss, type: 'indicator' },
+      { id: 'logic', label: 'Mantık', icon: GitBranch, type: 'logic' },
+      { id: 'action', label: 'İşlem', icon: CircleDollarSign, type: 'action' },
+      { id: 'price_filter', label: 'Fiyat Filtresi', icon: Filter, type: 'default' },
+      { id: 'trend_filter', label: 'Trend Filtresi', icon: TrendingUp, type: 'default' },
   ];
 
   const addNode = (nodeTemplate: typeof nodeTemplates[0]) => {
@@ -92,7 +94,7 @@ export default function EditorPage() {
       const jsonStrategy = compileStrategy(nodes, edges);
       console.log(jsonStrategy);
       toast({
-        title: "Strategy Compiled Successfully",
+        title: "Strateji Başarıyla Derlendi",
         description: (
           <ScrollArea className="h-40 mt-2">
             <pre className="mt-2 w-[340px] rounded-md bg-black/80 p-4">
@@ -104,7 +106,7 @@ export default function EditorPage() {
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Compilation Failed",
+        title: "Derleme Başarısız",
         description: (error as Error).message,
       });
     }
@@ -130,20 +132,20 @@ export default function EditorPage() {
         <div className="absolute top-4 left-4">
             <Card className="w-72 bg-card/80 backdrop-blur-sm">
                 <CardHeader>
-                    <CardTitle className="font-headline text-lg">Strategy: RSI Momentum</CardTitle>
-                    <CardDescription>Buys when RSI is oversold.</CardDescription>
+                    <CardTitle className="font-headline text-lg">Strateji: RSI Momentum</CardTitle>
+                    <CardDescription>RSI aşırı satım bölgesindeyken alım yapar.</CardDescription>
                 </CardHeader>
             </Card>
         </div>
         <div className="absolute top-4 right-4 space-x-2">
-            <Button onClick={handleCompile} variant="outline" className="bg-card/80 backdrop-blur-sm hover:bg-card"><Code className="mr-2 h-4 w-4" /> Compile</Button>
-            <Button><Save className="mr-2 h-4 w-4" /> Save & Deploy</Button>
+            <Button onClick={handleCompile} variant="outline" className="bg-card/80 backdrop-blur-sm hover:bg-card"><Code className="mr-2 h-4 w-4" /> Derle</Button>
+            <Button><Save className="mr-2 h-4 w-4" /> Kaydet ve Yayınla</Button>
         </div>
         <div className="absolute bottom-4 left-4 space-y-2">
             {nodeTemplates.map(nodeType => (
               <Button key={nodeType.id} variant="secondary" size="sm" className="w-full justify-start" onClick={() => addNode(nodeType)}>
                 <nodeType.icon className="mr-2 h-4 w-4 text-muted-foreground" />
-                Add {nodeType.label}
+                {nodeType.label} Ekle
               </Button>
             ))}
         </div>

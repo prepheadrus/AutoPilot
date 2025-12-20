@@ -12,15 +12,15 @@ export function IndicatorNode({ data }: NodeProps) {
       <div className="p-3 border-b border-slate-700">
         <div className="flex items-center gap-2">
             <Rss className="h-5 w-5 text-blue-400" />
-            <div className="font-bold">Indicator</div>
+            <div className="font-bold">İndikatör</div>
         </div>
       </div>
       <div className="p-3 space-y-4">
         <div className="space-y-2">
-            <Label htmlFor="indicator-type">Indicator Type</Label>
+            <Label htmlFor="indicator-type">İndikatör Tipi</Label>
             <Select defaultValue="rsi">
                 <SelectTrigger id="indicator-type" className="bg-slate-700 border-slate-600 text-white">
-                    <SelectValue placeholder="Select indicator" />
+                    <SelectValue placeholder="İndikatör seçin" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-600 text-white">
                     <SelectItem value="rsi">RSI</SelectItem>
@@ -30,7 +30,7 @@ export function IndicatorNode({ data }: NodeProps) {
             </Select>
         </div>
         <div className="space-y-2">
-            <Label htmlFor="period">Period</Label>
+            <Label htmlFor="period">Periyot</Label>
             <Input id="period" type="number" defaultValue={14} className="bg-slate-700 border-slate-600 text-white" />
         </div>
       </div>

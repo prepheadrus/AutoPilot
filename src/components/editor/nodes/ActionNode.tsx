@@ -19,24 +19,24 @@ export function ActionNode({ data }: NodeProps) {
         <div className="p-3 border-b border-slate-700">
             <div className="flex items-center gap-2">
                 <CircleDollarSign className={cn("h-5 w-5", iconColor)} />
-                <div className="font-bold">Action</div>
+                <div className="font-bold">İşlem</div>
             </div>
         </div>
       <div className="p-3 space-y-4">
         <div className="space-y-2">
-            <Label htmlFor="action-type">Action</Label>
+            <Label htmlFor="action-type">İşlem</Label>
             <Select defaultValue="buy" onValueChange={setAction}>
                 <SelectTrigger id="action-type" className="bg-slate-700 border-slate-600 text-white">
-                    <SelectValue placeholder="Select action" />
+                    <SelectValue placeholder="İşlem seçin" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-600 text-white">
-                    <SelectItem value="buy">Buy</SelectItem>
-                    <SelectItem value="sell">Sell</SelectItem>
+                    <SelectItem value="buy">Al</SelectItem>
+                    <SelectItem value="sell">Sat</SelectItem>
                 </SelectContent>
             </Select>
         </div>
         <div className="space-y-2">
-            <Label htmlFor="amount">Amount (USDT)</Label>
+            <Label htmlFor="amount">Miktar (USDT)</Label>
             <Input id="amount" type="number" defaultValue={100} className="bg-slate-700 border-slate-600 text-white" />
         </div>
       </div>
