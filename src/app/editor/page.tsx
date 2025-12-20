@@ -25,8 +25,6 @@ import { LogicNode } from "@/components/editor/nodes/LogicNode";
 import { ActionNode } from "@/components/editor/nodes/ActionNode";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 const nodeTypes = {
   indicator: IndicatorNode,
@@ -142,7 +140,7 @@ export default function EditorPage() {
   return (
     <div className="flex h-[calc(100vh-57px)] -m-4 md:-m-6 border-t">
       {/* Left Panel: Toolbar */}
-      <div className="w-72 border-r bg-muted/30 p-4 space-y-4">
+      <aside className="w-72 border-r bg-muted/30 p-4 space-y-4 flex flex-col">
         <Card>
             <CardHeader>
                 <CardTitle className="font-headline text-lg">Strateji: RSI Momentum</CardTitle>
@@ -159,10 +157,10 @@ export default function EditorPage() {
               </Button>
             ))}
         </div>
-      </div>
+      </aside>
 
       {/* Right Panel: Canvas */}
-      <div className="flex-1 relative">
+      <main className="flex-1 relative">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -182,7 +180,7 @@ export default function EditorPage() {
             <Button onClick={handleCompile} variant="outline" className="bg-card/80 backdrop-blur-sm hover:bg-card"><Code className="mr-2 h-4 w-4" /> Derle</Button>
             <Button><Save className="mr-2 h-4 w-4" /> Kaydet ve Yayınla</Button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
