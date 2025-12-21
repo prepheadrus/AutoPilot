@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -16,14 +16,23 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useRouter } from 'next/navigation';
 import {
-  AreaChart,
+  ComposedChart,
+  Line,
   Area,
+  Bar,
   XAxis,
   YAxis,
-  Tooltip,
-  ResponsiveContainer,
   CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Scatter,
+  ReferenceLine,
+  ZAxis,
+  TooltipProps,
 } from 'recharts';
+import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
+
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -32,7 +41,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from '@/components/ui/slider';
-import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon } from 'lucide-react';
+import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
@@ -71,10 +80,45 @@ const nodeTypes = {
   action: ActionNode,
 };
 
-const backtestChartData = Array.from({ length: 30 }, (_, i) => ({
-  day: i + 1,
-  profit: 10000 + (i * 40) + (Math.sin(i / 3) * 200) + (Math.random() * 150 * (i/5)),
-}));
+// --- START: Mock Data Generation for Advanced Backtest ---
+
+// Generate more realistic OHLC data
+const generateMockOHLCData = () => {
+    let price = 65000;
+    const data = [];
+    for (let i = 0; i < 60; i++) {
+        const open = price;
+        const high = open + Math.random() * 500;
+        const low = open - Math.random() * 500;
+        const close = low + Math.random() * (high - low);
+        price = close;
+        data.push({
+            time: `D${i+1}`,
+            ohlc: [open, high, low, close],
+            rsi: 30 + Math.random() * 40,
+        });
+    }
+    return data;
+};
+
+const mockBacktestData = generateMockOHLCData();
+
+// Simulate some trades based on the OHLC data
+const mockTradeData = [
+    { time: 'D10', type: 'buy', price: mockBacktestData[9].ohlc[3], rsi: mockBacktestData[9].rsi },
+    { time: 'D18', type: 'sell', price: mockBacktestData[17].ohlc[3], rsi: mockBacktestData[17].rsi },
+    { time: 'D25', type: 'buy', price: mockBacktestData[24].ohlc[3], rsi: mockBacktestData[24].rsi },
+    { time: 'D35', type: 'sell', price: mockBacktestData[34].ohlc[3], rsi: mockBacktestData[34].rsi },
+    { time: 'D48', type: 'buy', price: mockBacktestData[47].ohlc[3], rsi: mockBacktestData[47].rsi },
+    { time: 'D55', type: 'sell', price: mockBacktestData[54].ohlc[3], rsi: mockBacktestData[54].rsi },
+].map(trade => {
+    const dataPoint = mockBacktestData.find(d => d.time === trade.time);
+    return {
+        ...trade,
+        // Position markers above/below the candle
+        position: trade.type === 'buy' ? dataPoint!.ohlc[2] * 0.995 : dataPoint!.ohlc[1] * 1.005
+    };
+});
 
 const initialStrategyConfig: BotConfig = {
     stopLoss: 2.0,
@@ -84,6 +128,50 @@ const initialStrategyConfig: BotConfig = {
     amount: 100,
     leverage: 1
 };
+
+
+// Custom Shape for Scatter Markers
+const TradeMarker = (props: any) => {
+    const { cx, cy, payload } = props;
+    if (payload.type === 'buy') {
+        return <ArrowUp x={cx - 8} y={cy - 8} width={16} height={16} className="text-green-500 fill-current" />;
+    }
+    if (payload.type === 'sell') {
+        return <ArrowDown x={cx - 8} y={cy - 8} width={16} height={16} className="text-red-500 fill-current" />;
+    }
+    return null;
+};
+
+// Custom Tooltip for combined chart
+const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
+    if (active && payload && payload.length) {
+        const ohlc = payload.find(p => p.dataKey === 'ohlc')?.payload.ohlc;
+        const rsi = payload.find(p => p.dataKey === 'rsi')?.payload.rsi;
+        const trade = payload.find(p => p.dataKey === 'position');
+
+        return (
+            <div className="p-2 bg-slate-800/80 border border-slate-700 rounded-md text-white text-xs backdrop-blur-sm">
+                <p className="font-bold">{`Tarih: ${label}`}</p>
+                {ohlc && (
+                    <>
+                        <p>Açılış: <span className="font-mono">${ohlc[0].toFixed(2)}</span></p>
+                        <p>Yüksek: <span className="font-mono">${ohlc[1].toFixed(2)}</span></p>
+                        <p>Düşük: <span className="font-mono">${ohlc[2].toFixed(2)}</span></p>
+                        <p>Kapanış: <span className="font-mono">${ohlc[3].toFixed(2)}</span></p>
+                    </>
+                )}
+                {rsi && <p>RSI: <span className="font-mono">{rsi.toFixed(2)}</span></p>}
+                {trade && (
+                     <p className={`font-bold mt-2 ${trade.payload.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+                        {trade.payload.type.toUpperCase()} @ ${trade.payload.price.toFixed(2)}
+                    </p>
+                )}
+            </div>
+        );
+    }
+    return null;
+};
+// --- END: Mock Data Generation ---
 
 
 export default function StrategyEditorPage() {
@@ -281,59 +369,100 @@ export default function StrategyEditorPage() {
         </main>
         
         {isBacktestModalOpen && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                <div className="w-full max-w-2xl rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
-                    <div className="flex items-center justify-between border-b border-slate-800 p-4">
-                        <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu (Son 30 Gün)</h2>
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                <div className="w-[90vw] h-[85vh] flex flex-col rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
+                    <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0">
+                        <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu</h2>
                         <Button variant="ghost" size="icon" onClick={() => setIsBacktestModalOpen(false)}>
                             <XIcon className="h-5 w-5"/>
                         </Button>
                     </div>
-                    <div className="p-6">
-                        <div className="grid grid-cols-3 gap-4 mb-6 text-center">
-                            <div className="rounded-lg bg-slate-800/50 p-4">
-                                <p className="text-sm text-slate-400">Net Kâr</p>
-                                <p className="text-2xl font-bold text-green-400">+$1,240.50 <span className="text-base font-medium">(%12.4)</span></p>
+                    <div className="p-4 md:p-6 flex-1 min-h-0">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center">
+                            <div className="rounded-lg bg-slate-800/50 p-3">
+                                <p className="text-xs text-slate-400">Net Kâr</p>
+                                <p className="text-lg font-bold text-green-400">+$1,240.50 <span className="text-sm font-medium text-slate-300">(%12.4)</span></p>
                             </div>
-                            <div className="rounded-lg bg-slate-800/50 p-4">
-                                <p className="text-sm text-slate-400">Toplam İşlem</p>
-                                <p className="text-2xl font-bold">42</p>
+                            <div className="rounded-lg bg-slate-800/50 p-3">
+                                <p className="text-xs text-slate-400">Maks. Düşüş</p>
+                                <p className="text-lg font-bold text-red-400">-5.2%</p>
                             </div>
-                            <div className="rounded-lg bg-slate-800/50 p-4">
-                                <p className="text-sm text-slate-400">Başarı Oranı</p>
-                                <p className="text-2xl font-bold">68%</p>
+                            <div className="rounded-lg bg-slate-800/50 p-3">
+                                <p className="text-xs text-slate-400">Kâr Faktörü</p>
+                                <p className="text-lg font-bold">2.18</p>
+                            </div>
+                            <div className="rounded-lg bg-slate-800/50 p-3">
+                                <p className="text-xs text-slate-400">Toplam İşlem</p>
+                                <p className="text-lg font-bold">6</p>
                             </div>
                         </div>
 
-                        <div className="h-64 w-full">
+                        <div className="h-[calc(100%-80px)] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={backtestChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                                    <defs>
-                                        <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
-                                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                    <XAxis dataKey="day" stroke="rgba(255,255,255,0.4)" fontSize={12} tickFormatter={(val) => `Gün ${val}`} />
-                                    <YAxis stroke="rgba(255,255,255,0.4)" fontSize={12} tickFormatter={(val) => `$${(val/1000).toFixed(1)}k`}/>
-                                    <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: '#1e293b',
-                                            borderColor: '#334155',
-                                            color: '#cbd5e1',
-                                            borderRadius: '0.5rem',
-                                        }}
-                                        labelFormatter={(label) => `Gün ${label}`}
-                                        formatter={(value: number) => [value.toLocaleString('en-US', {style: 'currency', currency: 'USD'}), 'Kümülatif Kâr']}
+                               <ComposedChart data={mockBacktestData} syncId="backtestChart">
+                                    <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
+                                    <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                    <YAxis 
+                                        yAxisId="price" 
+                                        orientation="right"
+                                        domain={['dataMin * 0.98', 'dataMax * 1.02']} 
+                                        tickFormatter={(val: number) => `$${(val/1000).toFixed(1)}k`}
+                                        tick={{fontSize: 12}}
+                                        stroke="rgba(255,255,255,0.4)"
                                     />
-                                    <Area type="monotone" dataKey="profit" stroke="hsl(var(--primary))" fill="url(#colorProfit)" strokeWidth={2} />
-                                </AreaChart>
+                                    <YAxis yAxisId="rsi" orientation="right" domain={[0, 100]} tickCount={5} axisLine={false} tickLine={false} tick={{fontSize: 10}} hide={true} />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend />
+
+                                    {/* Candlestick - represented by a custom bar */}
+                                    <Bar dataKey="ohlc" yAxisId="price" fill="#8884d8" barSize={5} isAnimationActive={false}>
+                                       {mockBacktestData.map((entry, index) => {
+                                            const [open, high, low, close] = entry.ohlc;
+                                            const color = close > open ? 'hsl(var(--primary))' : 'hsl(var(--destructive))';
+                                            return <Bar key={`bar-${index}`} background={false} shape={
+                                                <rect 
+                                                    stroke={color} 
+                                                    fill={color}
+                                                    x={undefined as any}
+                                                    y={undefined as any}
+                                                    width={undefined as any}
+                                                    height={undefined as any}
+                                                />
+                                            } />;
+                                        })}
+                                    </Bar>
+
+                                     {/* Fake candlestick by composing two bars */}
+                                    <Bar yAxisId="price" dataKey={(v) => Math.max(v.ohlc[0], v.ohlc[3])} stackId="a" fill="transparent" isAnimationActive={false} />
+                                    <Bar yAxisId="price" dataKey={(v) => Math.abs(v.ohlc[0] - v.ohlc[3])} stackId="a" shape={(props: any) => {
+                                        const {x, y, width, height, payload} = props;
+                                        const color = payload.ohlc[3] > payload.ohlc[0] ? '#22c55e' : '#ef4444';
+                                        return <rect x={x} y={y} width={width} height={height} fill={color} />;
+                                    }} isAnimationActive={false}/>
+                                    <Bar yAxisId="price" dataKey={(v) => v.ohlc[1] - Math.max(v.ohlc[0], v.ohlc[3])} stackId="a" fill="transparent" shape={(props: any) => {
+                                        const {x, y, width, height, payload} = props;
+                                        const color = payload.ohlc[3] > payload.ohlc[0] ? '#22c55e' : '#ef4444';
+                                        return <rect x={x + width/2 - 0.5} y={y} width={1} height={height} fill={color} />;
+                                    }} isAnimationActive={false} />
+                                     <Bar yAxisId="price" dataKey={(v) => Math.min(v.ohlc[0], v_ohlc[3]) - v.ohlc[2]} stackId="a" fill="transparent" shape={(props: any) => {
+                                        const {x, y, width, height, payload} = props;
+                                        const color = payload.ohlc[3] > payload.ohlc[0] ? '#22c55e' : '#ef4444';
+                                        return <rect x={x + width/2 - 0.5} y={y} width={1} height={height} fill={color} />;
+                                    }} isAnimationActive={false} />
+                                    
+                                    {/* Trade Markers */}
+                                    <Scatter yAxisId="price" name="Trades" data={mockTradeData} dataKey="position" shape={<TradeMarker />} />
+                                    
+                                     {/* RSI Sub-chart */}
+                                    <ComposedChart data={mockBacktestData} syncId="backtestChart" height={150} margin={{top: 20}}>
+                                        <YAxis yAxisId="rsi" orientation="right" domain={[0, 100]} tickCount={3} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                        <ReferenceLine yAxisId="rsi" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
+                                        <ReferenceLine yAxisId="rsi" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
+                                        <Area yAxisId="rsi" type="monotone" dataKey="rsi" stroke="#8884d8" fill="#8884d8" fillOpacity={0.2} />
+                                    </ComposedChart>
+                               </ComposedChart>
                             </ResponsiveContainer>
                         </div>
-                    </div>
-                     <div className="flex justify-end border-t border-slate-800 p-4">
-                        <Button onClick={() => setIsBacktestModalOpen(false)} variant="secondary">Kapat</Button>
                     </div>
                 </div>
             </div>
@@ -363,7 +492,7 @@ export default function StrategyEditorPage() {
                                 </div>
                             </div>
                             <div className="flex items-center space-x-2 mt-4">
-                                <Checkbox id="trailing-stop" checked={strategyConfig.trailingStop} onCheckedChange={checked => handleConfigChange('trailingStop', checked)} />
+                                <Checkbox id="trailing-stop" checked={strategyConfig.trailingStop} onCheckedChange={checked => handleConfigChange('trailingStop', !!checked)} />
                                 <Label htmlFor="trailing-stop">Trailing Stop Kullan</Label>
                             </div>
                         </div>
@@ -420,3 +549,5 @@ export default function StrategyEditorPage() {
     </div>
   );
 }
+
+    
