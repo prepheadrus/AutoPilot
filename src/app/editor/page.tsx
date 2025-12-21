@@ -28,8 +28,6 @@ import {
   ResponsiveContainer,
   Scatter,
   ReferenceLine,
-  ZAxis,
-  TooltipProps,
 } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 
@@ -87,9 +85,9 @@ const generateMockOHLCData = () => {
     let price = 65000;
     const data = [];
     for (let i = 0; i < 60; i++) {
-        const open = price;
-        const high = open + Math.random() * 500;
-        const low = open - Math.random() * 500;
+        const open = price * (1 + (Math.random() - 0.5) * 0.01);
+        const high = Math.max(open, price) * (1 + Math.random() * 0.015);
+        const low = Math.min(open, price) * (1 - Math.random() * 0.015);
         const close = low + Math.random() * (high - low);
         price = close;
         data.push({
@@ -377,8 +375,8 @@ export default function StrategyEditorPage() {
                             <XIcon className="h-5 w-5"/>
                         </Button>
                     </div>
-                    <div className="p-4 md:p-6 flex-1 min-h-0">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center">
+                    <div className="p-4 md:p-6 flex-1 min-h-0 grid grid-rows-[auto,1fr] gap-6">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                             <div className="rounded-lg bg-slate-800/50 p-3">
                                 <p className="text-xs text-slate-400">Net Kâr</p>
                                 <p className="text-lg font-bold text-green-400">+$1,240.50 <span className="text-sm font-medium text-slate-300">(%12.4)</span></p>
@@ -397,7 +395,7 @@ export default function StrategyEditorPage() {
                             </div>
                         </div>
 
-                        <div className="h-[calc(100%-80px)] w-full">
+                        <div className="w-full h-full">
                             <ResponsiveContainer width="100%" height="100%">
                                <ComposedChart data={mockBacktestData} syncId="backtestChart">
                                     <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
@@ -413,27 +411,14 @@ export default function StrategyEditorPage() {
                                     <YAxis yAxisId="rsi" orientation="right" domain={[0, 100]} tickCount={5} axisLine={false} tickLine={false} tick={{fontSize: 10}} hide={true} />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Legend />
-
-                                    {/* Candlestick - represented by a custom bar */}
-                                    <Bar dataKey="ohlc" yAxisId="price" fill="#8884d8" barSize={5} isAnimationActive={false}>
-                                       {mockBacktestData.map((entry, index) => {
-                                            const [open, high, low, close] = entry.ohlc;
-                                            const color = close > open ? 'hsl(var(--primary))' : 'hsl(var(--destructive))';
-                                            return <Bar key={`bar-${index}`} background={false} shape={
-                                                <rect 
-                                                    stroke={color} 
-                                                    fill={color}
-                                                    x={undefined as any}
-                                                    y={undefined as any}
-                                                    width={undefined as any}
-                                                    height={undefined as any}
-                                                />
-                                            } />;
-                                        })}
-                                    </Bar>
-
-                                     {/* Fake candlestick by composing two bars */}
-                                    <Bar yAxisId="price" dataKey={(v) => v.ohlc ? Math.max(v.ohlc[0], v.ohlc[3]) : 0} stackId="a" fill="transparent" isAnimationActive={false} />
+                                    
+                                     {/* Fake candlestick by composing four bars and stacking them */}
+                                    <Bar yAxisId="price" dataKey={(v) => v.ohlc ? v.ohlc[2] : 0} stackId="a" fill="transparent" isAnimationActive={false} stroke="transparent" />
+                                    <Bar yAxisId="price" dataKey={(v) => v.ohlc ? Math.min(v.ohlc[0], v.ohlc[3]) - v.ohlc[2] : 0} stackId="a" fill="transparent" shape={(props: any) => {
+                                        const {x, y, width, height, payload} = props;
+                                        const color = payload.ohlc[3] > payload.ohlc[0] ? '#22c55e' : '#ef4444';
+                                        return <rect x={x + width/2 - 0.5} y={y} width={1} height={height} fill={color} />;
+                                    }} isAnimationActive={false}/>
                                     <Bar yAxisId="price" dataKey={(v) => v.ohlc ? Math.abs(v.ohlc[0] - v.ohlc[3]) : 0} stackId="a" shape={(props: any) => {
                                         const {x, y, width, height, payload} = props;
                                         const color = payload.ohlc[3] > payload.ohlc[0] ? '#22c55e' : '#ef4444';
@@ -444,23 +429,21 @@ export default function StrategyEditorPage() {
                                         const color = payload.ohlc[3] > payload.ohlc[0] ? '#22c55e' : '#ef4444';
                                         return <rect x={x + width/2 - 0.5} y={y} width={1} height={height} fill={color} />;
                                     }} isAnimationActive={false} />
-                                     <Bar yAxisId="price" dataKey={(v) => v.ohlc ? Math.min(v.ohlc[0], v.ohlc[3]) - v.ohlc[2] : 0} stackId="a" fill="transparent" shape={(props: any) => {
-                                        const {x, y, width, height, payload} = props;
-                                        const color = payload.ohlc[3] > payload.ohlc[0] ? '#22c55e' : '#ef4444';
-                                        return <rect x={x + width/2 - 0.5} y={y} width={1} height={height} fill={color} />;
-                                    }} isAnimationActive={false} />
                                     
                                     {/* Trade Markers */}
                                     <Scatter yAxisId="price" name="Trades" data={mockTradeData} dataKey="position" shape={<TradeMarker />} />
-                                    
-                                     {/* RSI Sub-chart */}
-                                    <ComposedChart data={mockBacktestData} syncId="backtestChart" height={150} margin={{top: 20}}>
-                                        <YAxis yAxisId="rsi" orientation="right" domain={[0, 100]} tickCount={3} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                        <ReferenceLine yAxisId="rsi" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
-                                        <ReferenceLine yAxisId="rsi" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
-                                        <Area yAxisId="rsi" type="monotone" dataKey="rsi" stroke="#8884d8" fill="#8884d8" fillOpacity={0.2} />
-                                    </ComposedChart>
                                </ComposedChart>
+                            </ResponsiveContainer>
+                            <ResponsiveContainer width="100%" height="25%">
+                                <ComposedChart data={mockBacktestData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}>
+                                    <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
+                                    <XAxis dataKey="time" hide={true}/>
+                                    <YAxis yAxisId="rsi" orientation="right" domain={[0, 100]} tickCount={3} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <ReferenceLine yAxisId="rsi" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
+                                    <ReferenceLine yAxisId="rsi" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
+                                    <Area yAxisId="rsi" type="monotone" dataKey="rsi" stroke="#8884d8" fill="#8884d8" fillOpacity={0.2} name="RSI"/>
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
@@ -549,5 +532,3 @@ export default function StrategyEditorPage() {
     </div>
   );
 }
-
-    
