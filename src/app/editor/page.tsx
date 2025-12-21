@@ -72,8 +72,8 @@ export default function StrategyEditorPage() {
     let nodeData = {};
     
     const position = {
-        x: 250 + Math.random() * 100,
-        y: 150 + Math.random() * 100,
+        x: 250 + (Math.random() - 0.5) * 200,
+        y: 150 + (Math.random() - 0.5) * 100,
     };
 
     if (type === 'indicator') {
@@ -136,7 +136,7 @@ export default function StrategyEditorPage() {
   };
 
   return (
-    <div className="flex flex-row w-full h-full">
+    <div className="flex h-full w-full flex-row">
         <aside className="w-64 flex-shrink-0 border-r bg-slate-900 p-4 flex flex-col gap-2">
             <h3 className="font-bold text-lg text-foreground mb-4 font-headline">Araç Kutusu</h3>
              <Button variant="outline" className="justify-start gap-2" onClick={() => addNode('indicator')}>

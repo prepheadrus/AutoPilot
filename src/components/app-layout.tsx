@@ -37,7 +37,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen w-full flex-col">
-      <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-30">
+      <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-30 shrink-0">
         <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
           <Link
             href="#"
@@ -118,12 +118,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main className={cn(
-          "flex-1 bg-background",
+          "flex-1 flex flex-col bg-background",
            isEditorPage ? "p-0 overflow-hidden" : "p-4 md:p-6"
         )}>
-          <div className={cn(isEditorPage ? "h-full" : "")}>
-            {children}
-          </div>
+          {children}
       </main>
     </div>
   );
