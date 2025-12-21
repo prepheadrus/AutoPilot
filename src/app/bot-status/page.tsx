@@ -49,21 +49,36 @@ const statusConfig: Record<BotStatus, { badge: "default" | "secondary" | "destru
 };
 
 // Helper to generate mock performance data for the detail panel chart
-const generateBotPerformanceData = (pnl: number) => {
+const generateBotPerformanceData = (bot: BotType) => {
     const data = [];
-    let value = 10000; // Start with a base value
+    const baseValue = bot.config.initialBalance || 10000;
+    let currentValue = bot.config.currentBalance || baseValue;
+    const pnlRatio = bot.pnl / 100;
+    
+    // Create a smooth-ish path to the current value over 30 days
+    const a = (currentValue - baseValue) / (29 * 29); // Coefficient for a quadratic curve
+
     for (let i = 29; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
+        
+        // Use a base curve + some noise
+        const day = 29-i;
+        const curveValue = baseValue + a * day * day;
+        const noise = (Math.random() - 0.5) * baseValue * 0.01; // +/- 0.5% noise
+        let finalValue = curveValue + noise;
+
         data.push({
             name: date.toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' }),
-            profit: value,
+            profit: finalValue,
         });
-        const fluctuation = pnl > 0 ? (Math.random() * 0.02) : (Math.random() * 0.01 - 0.005);
-        value *= (1 + (pnl / 100 / 30) + fluctuation);
     }
+    // Ensure the last point is accurate
+    data[29].profit = currentValue;
+
     return data;
 };
+
 
 export default function BotStatusPage() {
     const [bots, setBots] = useState<BotType[]>([]);
@@ -95,10 +110,11 @@ export default function BotStatusPage() {
 
                 if (config.inPosition && decision === 'sell') {
                     const profit = (currentPrice - (config.entryPrice || currentPrice)) * (config.positionSize || 0);
-                    newPnl += (profit / (config.initialBalance || 10000)) * 100;
+                    const newCurrentBalance = (config.currentBalance || 0) + profit;
+                    newPnl = ((newCurrentBalance - (config.initialBalance || 10000)) / (config.initialBalance || 10000)) * 100;
                     logMessage = `[${b.name}] [PAPER] SATIŞ @ ${currentPrice.toFixed(2)}. K&Z: ${profit.toFixed(2)}$`;
                     addLog('trade', logMessage);
-                    newConfig = { ...newConfig, inPosition: false, entryPrice: undefined, currentBalance: (config.currentBalance || 0) + profit };
+                    newConfig = { ...newConfig, inPosition: false, entryPrice: undefined, currentBalance: newCurrentBalance };
                 } else if (!config.inPosition && decision === 'buy') {
                     logMessage = `[${b.name}] [PAPER] ALIŞ @ ${currentPrice.toFixed(2)}.`;
                     addLog('trade', logMessage);
@@ -259,7 +275,13 @@ export default function BotStatusPage() {
 
     const handleConfigChange = (field: keyof BotConfig, value: any) => {
         if (editedConfig) {
-            setEditedConfig(prev => ({...prev!, [field]: value}));
+            // Ensure numeric fields are parsed correctly
+            const numericFields: (keyof BotConfig)[] = ['stopLoss', 'takeProfit', 'amount', 'leverage'];
+            if (numericFields.includes(field)) {
+                 setEditedConfig(prev => ({...prev!, [field]: parseFloat(value) || 0}));
+            } else {
+                 setEditedConfig(prev => ({...prev!, [field]: value}));
+            }
         }
     }
 
@@ -291,7 +313,7 @@ export default function BotStatusPage() {
     
     const botPerformanceData = useMemo(() => {
         if (!selectedBot) return [];
-        return generateBotPerformanceData(selectedBot.config.currentBalance || selectedBot.config.initialBalance || 10000);
+        return generateBotPerformanceData(selectedBot);
     }, [selectedBot]);
 
 
@@ -403,13 +425,18 @@ export default function BotStatusPage() {
 
             {/* Bot Detay Paneli (Sheet) */}
             <Sheet open={!!selectedBot} onOpenChange={(isOpen) => !isOpen && setSelectedBot(null)}>
-                <SheetContent className="w-[400px] sm:w-[540px] bg-slate-900 border-slate-800 text-white p-0">
+                <SheetContent className="w-[400px] sm:w-[540px] bg-slate-900/95 border-slate-800 text-white p-0">
                     {selectedBot && (
                         <>
                             <SheetHeader className="p-6 border-b border-slate-800">
-                                <SheetTitle className="font-headline text-2xl flex items-center gap-3">
-                                    <Bot className="h-6 w-6 text-primary" /> {selectedBot.name}
-                                </SheetTitle>
+                                <div className="flex justify-between items-start">
+                                    <SheetTitle className="font-headline text-2xl flex items-center gap-3">
+                                        <Bot className="h-6 w-6 text-primary" /> {selectedBot.name}
+                                    </SheetTitle>
+                                    <Button variant="ghost" size="icon" onClick={() => setSelectedBot(null)}>
+                                        <XIcon className="h-5 w-5"/>
+                                    </Button>
+                                </div>
                                 <div className="text-sm text-muted-foreground flex items-center gap-4 pt-2">
                                      <span className="text-muted-foreground font-mono">{selectedBot.pair}</span>
                                      <Badge variant={statusConfig[selectedBot.status].badge}>{selectedBot.status}</Badge>
@@ -421,7 +448,7 @@ export default function BotStatusPage() {
                                 </div>
                             </SheetHeader>
                             <Tabs defaultValue="overview" className="w-full">
-                                <TabsList className="grid w-full grid-cols-3 bg-slate-900 border-b border-slate-800 rounded-none px-6">
+                                <TabsList className="grid w-full grid-cols-3 bg-slate-900/95 border-b border-slate-800 rounded-none px-6">
                                     <TabsTrigger value="overview"><AreaChartIcon className="mr-2 h-4 w-4" />Genel Bakış</TabsTrigger>
                                     <TabsTrigger value="performance"><Activity className="mr-2 h-4 w-4"/>Performans</TabsTrigger>
                                     <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4" />Ayarlar</TabsTrigger>
@@ -440,7 +467,9 @@ export default function BotStatusPage() {
                                                             </linearGradient>
                                                         </defs>
                                                         <YAxis stroke="rgba(255,255,255,0.4)" fontSize={12} tickFormatter={(val) => `$${(val/1000).toFixed(1)}k`}/>
+                                                        <XAxis dataKey="name" stroke="rgba(255,255,255,0.4)" fontSize={12} tickLine={false} axisLine={false} />
                                                         <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '0.5rem' }} />
+                                                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                                                         <Area type="monotone" dataKey="profit" stroke={selectedBot.pnl >= 0 ? "hsl(var(--primary))" : "hsl(var(--destructive))"} fill="url(#colorProfit)" strokeWidth={2} />
                                                     </AreaChart>
                                                 </ResponsiveContainer>
@@ -479,15 +508,15 @@ export default function BotStatusPage() {
                                             <div>
                                                 <h4 className="font-semibold mb-3">Risk Yönetimi</h4>
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    <div className="space-y-2"><Label>Stop Loss (%)</Label><Input type="number" value={editedConfig.stopLoss} onChange={(e) => handleConfigChange('stopLoss', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/></div>
-                                                    <div className="space-y-2"><Label>Take Profit (%)</Label><Input type="number" value={editedConfig.takeProfit} onChange={(e) => handleConfigChange('takeProfit', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/></div>
+                                                    <div className="space-y-2"><Label>Stop Loss (%)</Label><Input type="number" value={editedConfig.stopLoss} onChange={(e) => handleConfigChange('stopLoss', e.target.value)} className="bg-slate-800 border-slate-700"/></div>
+                                                    <div className="space-y-2"><Label>Take Profit (%)</Label><Input type="number" value={editedConfig.takeProfit} onChange={(e) => handleConfigChange('takeProfit', e.target.value)} className="bg-slate-800 border-slate-700"/></div>
                                                 </div>
                                             </div>
                                              <div>
                                                 <h4 className="font-semibold mb-3">Pozisyon</h4>
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    <div className="space-y-2"><Label>Miktar ({editedConfig.amountType === 'fixed' ? '$' : '%'})</Label><Input type="number" value={editedConfig.amount} onChange={(e) => handleConfigChange('amount', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/></div>
-                                                    <div className="space-y-2"><Label>Kaldıraç</Label><Input type="number" value={editedConfig.leverage} onChange={(e) => handleConfigChange('leverage', parseInt(e.target.value, 10))} className="bg-slate-800 border-slate-700"/></div>
+                                                    <div className="space-y-2"><Label>Miktar ({editedConfig.amountType === 'fixed' ? '$' : '%'})</Label><Input type="number" value={editedConfig.amount} onChange={(e) => handleConfigChange('amount', e.target.value)} className="bg-slate-800 border-slate-700"/></div>
+                                                    <div className="space-y-2"><Label>Kaldıraç</Label><Input type="number" value={editedConfig.leverage} onChange={(e) => handleConfigChange('leverage', e.target.value)} className="bg-slate-800 border-slate-700"/></div>
                                                 </div>
                                             </div>
                                             <Button onClick={handleUpdateConfig} className="w-full">Ayarları Kaydet</Button>
@@ -505,3 +534,5 @@ export default function BotStatusPage() {
         </div>
     );
 }
+
+    
