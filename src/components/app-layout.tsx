@@ -25,11 +25,11 @@ import {
 } from "@/components/ui/sheet";
 
 const navItems = [
-  { href: "/", icon: LayoutDashboard, label: "Özet Panel" },
-  { href: "/editor", icon: Share2, label: "Strateji Editörü" },
-  { href: "/bot-status", icon: Bot, label: "Bot Yönetimi" },
-  { href: "/market", icon: CandlestickChart, label: "Piyasa Analizi" },
-  { href: "/settings", icon: Settings, label: "Ayarlar" },
+  { href: "/", label: "Özet Panel", icon: LayoutDashboard },
+  { href: "/editor", label: "Strateji Editörü", icon: Share2 },
+  { href: "/bot-status", label: "Bot Yönetimi", icon: Bot },
+  { href: "/market", label: "Piyasa Analizi", icon: CandlestickChart },
+  { href: "/settings", label: "Ayarlar", icon: Settings },
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -43,7 +43,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-30 shrink-0">
         <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
           <Link
-            href="#"
+            href="/"
             className="flex items-center gap-2 text-lg font-semibold md:text-base text-primary"
           >
             <Bot className="h-6 w-6" />
@@ -54,10 +54,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "transition-colors hover:text-foreground",
+                "transition-colors hover:text-foreground flex items-center gap-2",
                 pathname === item.href ? "text-foreground" : "text-muted-foreground"
               )}
             >
+              <item.icon className="h-4 w-4"/>
               {item.label}
             </Link>
           ))}
@@ -120,7 +121,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
         </div>
       </header>
-       <main className={cn("flex flex-col flex-1", isEditorPage ? "p-0 overflow-hidden" : "p-4 md:p-6")}>
+       <main className={cn("flex flex-col flex-1", isEditorPage ? "p-0 overflow-hidden" : "p-0")}>
           {children}
       </main>
     </div>
