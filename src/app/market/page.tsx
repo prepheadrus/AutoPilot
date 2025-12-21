@@ -118,7 +118,7 @@ export default function MarketTerminalPage() {
   );
 
   return (
-    <div className="flex h-full w-full flex-row overflow-hidden border border-slate-800 rounded-lg bg-slate-950">
+    <div className="flex h-full w-full flex-row overflow-hidden rounded-lg bg-slate-950 border border-slate-800">
         {/* Left Panel: Market List */}
         <aside className="w-1/4 flex-shrink-0 border-r border-slate-800 bg-slate-900/50 flex flex-col">
             <div className="p-4 border-b border-slate-800">
@@ -178,7 +178,7 @@ export default function MarketTerminalPage() {
 
         {/* Right Panel: Chart and Actions */}
         <main className="flex-1 flex flex-col">
-            <div className="flex h-16 items-center justify-between p-4 border-b border-slate-800">
+            <div className="flex h-16 items-center justify-between p-4 border-b border-slate-800 shrink-0">
                 <h1 className="text-xl font-headline font-bold text-white">{selectedSymbol}/USDT</h1>
                 <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
                     <Link href={`/editor?symbol=${selectedSymbol}USDT`}>
@@ -193,3 +193,5 @@ export default function MarketTerminalPage() {
     </div>
   );
 }
+
+    
