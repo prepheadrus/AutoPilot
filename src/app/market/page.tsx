@@ -175,7 +175,8 @@ export default function MarketTerminalPage() {
     if (!searchQuery) return []; // Don't show anything if search is empty
     return marketData.filter(coin =>
         coin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        coin.symbol.toLowerCase().includes(searchQuery.toLowerCase())
+        coin.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        searchQuery.toLowerCase().includes(coin.symbol.toLowerCase())
     )
   }, [marketData, searchQuery]);
 
@@ -311,4 +312,3 @@ export default function MarketTerminalPage() {
   );
 }
 
-    
