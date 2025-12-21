@@ -1,12 +1,18 @@
 'use client';
 
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef, memo, useId } from 'react';
 import Link from 'next/link';
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+declare global {
+    interface Window {
+        TradingView: any;
+    }
+}
 
 // Mock data for the market list
 const marketListData = [
@@ -26,55 +32,56 @@ const marketListData = [
 // Memoized TradingView Widget to prevent re-renders on parent state changes
 const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const widgetId = useId();
+  const container_id = `tradingview_widget_${widgetId}`;
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    // Clear previous widget
-    container.innerHTML = '';
-    
     const script = document.createElement("script");
     script.src = "https://s3.tradingview.com/tv.js";
     script.type = "text/javascript";
     script.async = true;
-    script.onload = () => {
-      if (typeof (window as any).TradingView !== 'undefined') {
-        new (window as any).TradingView.widget({
-          autosize: true,
-          symbol: `BINANCE:${symbol.toUpperCase()}USDT`,
-          interval: "D",
-          timezone: "Etc/UTC",
-          theme: "dark",
-          style: "1",
-          locale: "tr",
-          toolbar_bg: "#f1f3f6",
-          enable_publishing: false,
-          withdateranges: true,
-          hide_side_toolbar: false,
-          allow_symbol_change: true,
-          container_id: container.id
-        });
-      }
-    };
-    
-    // Check if the script already exists to avoid duplicates
-    const scriptId = 'tradingview-widget-script';
-    if (!document.getElementById(scriptId)) {
-        script.id = scriptId;
-        document.body.appendChild(script);
-    } else {
-        // If script is already there, just run onload logic
-        if (typeof (window as any).TradingView !== 'undefined') {
-            script.onload();
+    script.id = 'tradingview-widget-script';
+
+    const createWidget = () => {
+        if (document.getElementById(container_id) && typeof window.TradingView !== 'undefined') {
+            new window.TradingView.widget({
+              autosize: true,
+              symbol: `BINANCE:${symbol.toUpperCase()}USDT`,
+              interval: "D",
+              timezone: "Etc/UTC",
+              theme: "dark",
+              style: "1",
+              locale: "tr",
+              enable_publishing: false,
+              withdateranges: true,
+              hide_side_toolbar: false,
+              allow_symbol_change: true,
+              container_id: container_id
+            });
         }
     }
+    
+    // Clear previous widget before creating a new one
+    const widgetContainer = document.getElementById(container_id);
+    if(widgetContainer) {
+        widgetContainer.innerHTML = '';
+    }
 
-  }, [symbol]);
+    if (!document.getElementById(script.id)) {
+        script.onload = createWidget;
+        document.body.appendChild(script);
+    } else {
+        createWidget();
+    }
+
+  }, [symbol, container_id]);
 
   return (
     <div className="tradingview-widget-container h-full" ref={containerRef}>
-      <div id={`tradingview_widget_${Date.now()}`} className="h-full" />
+      <div id={container_id} className="h-full" />
     </div>
   );
 });
