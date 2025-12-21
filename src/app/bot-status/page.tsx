@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState } from "react";
+import { useState, MouseEvent } from "react";
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,25 @@ const initialBots = [
     { id: 4, name: "AVAX Arbitraj", pair: "AVAX/USDT", status: "Hata", pnl: 0, duration: "1sa" },
 ];
 
-const initialLogs = [
+type LogType = 'info' | 'trade' | 'warning' | 'error';
+type BotStatus = "Çalışıyor" | "Durduruldu" | "Hata";
+
+type Bot = {
+    id: number;
+    name: string;
+    pair: string;
+    status: BotStatus;
+    pnl: number;
+    duration: string;
+};
+
+type Log = {
+    type: LogType;
+    message: string;
+};
+
+
+const initialLogs: Log[] = [
     { type: 'info', message: '[10:00:00] "BTC-RSI Stratejisi" botu başlatıldı.' },
     { type: 'trade', message: '[10:05:12] 0.1 BTC @ 68123.45 USDT ALINDI.' },
     { type: 'trade', message: '[10:15:30] 0.1 BTC @ 68456.78 USDT SATILDI. K&Z: +$33.33' },
@@ -24,14 +43,14 @@ const initialLogs = [
     { type: 'info', message: '[10:22:00] "ETH-MACD Scalp" botu kullanıcı tarafından duraklatıldı.' },
 ];
 
-const logTypeConfig = {
+const logTypeConfig: Record<LogType, string> = {
     info: "text-foreground",
     trade: "text-accent",
-    warning: "text-muted-foreground",
+    warning: "text-yellow-400",
     error: "text-destructive",
 };
 
-const statusConfig = {
+const statusConfig: Record<BotStatus, { badge: "default" | "secondary" | "destructive", dot: string, icon: JSX.Element, action: string }> = {
     "Çalışıyor": {
         badge: "default",
         dot: "bg-green-500 animate-pulse",
@@ -53,35 +72,43 @@ const statusConfig = {
 };
 
 export default function BotStatusPage() {
-    const [bots, setBots] = useState(initialBots);
-    const [logs, setLogs] = useState(initialLogs);
+    const [bots, setBots] = useState<Bot[]>(initialBots);
+    const [logs, setLogs] = useState<Log[]>(initialLogs);
 
-    const addLog = (type: keyof typeof logTypeConfig, message: string) => {
+    const addLog = (type: LogType, message: string) => {
         const timestamp = new Date().toLocaleTimeString('tr-TR', { hour12: false });
         setLogs(prevLogs => [{ type, message: `[${timestamp}] ${message}` }, ...prevLogs]);
-    }
+    };
 
-    const handleToggleStatus = (botId: number) => {
+    const handleToggleStatus = (e: MouseEvent, botId: number) => {
+        e.stopPropagation();
         setBots(bots.map(bot => {
             if (bot.id === botId) {
                 if (bot.status === "Çalışıyor") {
                     addLog('info', `"${bot.name}" botu kullanıcı tarafından durduruldu.`);
                     return { ...bot, status: "Durduruldu" };
+                } else if (bot.status === "Durduruldu" || bot.status === "Hata") {
+                    addLog('info', `"${bot.name}" botu kullanıcı tarafından başlatıldı.`);
+                    return { ...bot, status: "Çalışıyor" };
                 }
-                addLog('info', `"${bot.name}" botu kullanıcı tarafından başlatıldı.`);
-                return { ...bot, status: "Çalışıyor" };
             }
             return bot;
         }));
     };
 
-    const handleDeleteBot = (botId: number) => {
-        const botToDelete = bots.find(bot => bot.id === botId);
-        if (botToDelete && window.confirm(`"${botToDelete.name}" adlı botu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`)) {
-            setBots(bots.filter(bot => bot.id !== botId));
-            addLog('warning', `"${botToDelete.name}" botu kalıcı olarak silindi.`);
+    const handleDeleteBot = (e: MouseEvent, botId: number, botName: string) => {
+        e.stopPropagation();
+        if (window.confirm(`"${botName}" adlı botu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`)) {
+            setBots(prev => prev.filter(bot => bot.id !== botId));
+            addLog('warning', `Bot silindi: "${botName}"`);
         }
     };
+    
+    const handleSettings = (e: MouseEvent, botId: number) => {
+        e.stopPropagation();
+        console.log(`Ayarlar tıklandı: ${botId}`);
+        window.alert("Ayarlar modülü henüz aktif değil.");
+    }
 
     return (
         <div className="flex flex-col h-full p-4 md:p-6 bg-background overflow-y-auto space-y-6">
@@ -96,7 +123,7 @@ export default function BotStatusPage() {
             
             <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
                 {bots.map((bot) => {
-                    const config = statusConfig[bot.status as keyof typeof statusConfig];
+                    const config = statusConfig[bot.status];
                     return (
                         <Card key={bot.id} className="flex flex-col border-l-4 border-transparent data-[status=Çalışıyor]:border-primary data-[status=Hata]:border-destructive" data-status={bot.status}>
                             <CardHeader>
@@ -107,18 +134,18 @@ export default function BotStatusPage() {
                                         </CardTitle>
                                         <CardDescription className="pt-2 flex items-center gap-2">
                                             <div className={cn("w-2 h-2 rounded-full", config.dot)}></div>
-                                            <Badge variant={config.badge as any}>{bot.status}</Badge>
+                                            <Badge variant={config.badge}>{bot.status}</Badge>
                                             <span className="text-muted-foreground font-mono text-xs">{bot.pair}</span>
                                         </CardDescription>
                                     </div>
                                     <div className="flex gap-1">
-                                        <Button variant="ghost" size="icon" onClick={() => handleToggleStatus(bot.id)} aria-label={config.action}>
+                                        <Button variant="ghost" size="icon" onClick={(e) => handleToggleStatus(e, bot.id)} aria-label={config.action}>
                                             {config.icon}
                                         </Button>
-                                         <Button variant="ghost" size="icon">
+                                         <Button variant="ghost" size="icon" onClick={(e) => handleSettings(e, bot.id)}>
                                             <Settings className="h-4 w-4"/>
                                         </Button>
-                                         <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteBot(bot.id)} aria-label="Sil">
+                                         <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => handleDeleteBot(e, bot.id, bot.name)} aria-label="Sil">
                                             <Trash2 className="h-4 w-4"/>
                                         </Button>
                                     </div>
@@ -162,7 +189,7 @@ export default function BotStatusPage() {
                     <div className="bg-black rounded-lg p-4 font-mono text-sm text-white/90 h-64 overflow-y-auto space-y-1 flex flex-col-reverse">
                        <div>
                          {logs.map((log, index) => (
-                            <p key={index}><span className={cn(logTypeConfig[log.type as keyof typeof logTypeConfig])}>[{log.type.toUpperCase()}]</span> {log.message}</p>
+                            <p key={index}><span className={cn(logTypeConfig[log.type])}>[{log.type.toUpperCase()}]</span> {log.message}</p>
                         ))}
                        </div>
                     </div>
