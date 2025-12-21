@@ -4,7 +4,7 @@ import { useState, MouseEvent, useEffect, useMemo, useRef, useCallback } from "r
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Terminal, Bot, Settings, PlusCircle, Trash2, Eye, X as XIcon, AreaChart as AreaChartIcon, FileText, Activity } from "lucide-react";
+import { Play, Pause, Terminal, Bot, Settings, PlusCircle, Trash2, Eye, X as XIcon, AreaChart as AreaChartIcon, Activity } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Bot as BotType, Log, BotStatus, BotConfig } from "@/lib/types";
@@ -17,9 +17,9 @@ import { useToast } from "@/hooks/use-toast";
 
 const initialBots: BotType[] = [
     { id: 1, name: "BTC-RSI Stratejisi", pair: "BTC/USDT", status: "Çalışıyor", pnl: 12.5, duration: "2g 5sa", config: { mode: 'PAPER', stopLoss: 2, takeProfit: 5, trailingStop: false, amountType: 'fixed', amount: 100, leverage: 5, initialBalance: 10000, currentBalance: 11250, inPosition: true, entryPrice: 65000, positionSize: 0.1 } },
-    { id: 2, name: "ETH-MACD Scalp", pair: "ETH/USDT", status: "Durduruldu", pnl: -3.2, duration: "12sa 15dk", config: { mode: 'LIVE', stopLoss: 1.5, takeProfit: 3, trailingStop: true, amountType: 'percentage', amount: 10, leverage: 10 } },
+    { id: 2, name: "ETH-MACD Scalp", pair: "ETH/USDT", status: "Durduruldu", pnl: -3.2, duration: "12sa 15dk", config: { mode: 'LIVE', stopLoss: 1.5, takeProfit: 3, trailingStop: true, amountType: 'percentage', amount: 10, leverage: 10, initialBalance: 10000 } },
     { id: 3, name: "SOL-Trend Follow", pair: "SOL/USDT", status: "Çalışıyor", pnl: 8.9, duration: "5g 1sa", config: { mode: 'PAPER', stopLoss: 5, takeProfit: 10, trailingStop: false, amountType: 'fixed', amount: 250, leverage: 3, initialBalance: 10000, currentBalance: 10890, inPosition: false } },
-    { id: 4, name: "AVAX Arbitraj", pair: "AVAX/USDT", status: "Hata", pnl: 0, duration: "1sa", config: { mode: 'LIVE', stopLoss: 3, takeProfit: 6, trailingStop: false, amountType: 'fixed', amount: 50, leverage: 1 } },
+    { id: 4, name: "AVAX Arbitraj", pair: "AVAX/USDT", status: "Hata", pnl: 0, duration: "1sa", config: { mode: 'LIVE', stopLoss: 3, takeProfit: 6, trailingStop: false, amountType: 'fixed', amount: 50, leverage: 1, initialBalance: 10000 } },
 ];
 
 type LogType = 'info' | 'trade' | 'warning' | 'error';
@@ -118,10 +118,18 @@ export default function BotStatusPage() {
             const storedBots = localStorage.getItem('myBots');
             if (storedBots) {
                 const parsedBots: BotType[] = JSON.parse(storedBots);
+                // Ensure every bot has a full config, falling back to defaults
                 const botsWithDefaults = parsedBots.map(bot => ({
                     ...bot,
                     config: {
-                        ...initialBots[0].config,
+                        mode: 'PAPER',
+                        stopLoss: 2.0,
+                        takeProfit: 5.0,
+                        trailingStop: false,
+                        amountType: 'fixed',
+                        amount: 100,
+                        leverage: 1,
+                        initialBalance: 10000,
                         ...bot.config,
                     }
                 }));
@@ -131,6 +139,11 @@ export default function BotStatusPage() {
             }
         } catch (error) {
             console.error("Botlar localStorage'dan yüklenirken hata:", error);
+            toast({
+                title: 'Veri Yükleme Hatası',
+                description: 'Bot verileri yüklenirken bir sorun oluştu. Varsayılan veriler kullanılıyor.',
+                variant: 'destructive',
+            });
             setBots(initialBots);
         }
 
@@ -138,7 +151,7 @@ export default function BotStatusPage() {
         return () => {
             Object.values(intervalRefs.current).forEach(clearInterval);
         };
-    }, []);
+    }, [toast]);
 
     // Effect to manage simulation intervals
     useEffect(() => {
@@ -232,7 +245,21 @@ export default function BotStatusPage() {
     }
     
     const botPerformanceData = useMemo(() => {
-        return selectedBot ? generateBotPerformanceData(selectedBot.pnl) : [];
+        if (!selectedBot) return [];
+        // Prevent re-calculation on every render
+        const data = [];
+        let value = 1000;
+        for (let i = 29; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            data.push({
+                name: date.toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' }),
+                profit: value,
+            });
+            const fluctuation = selectedBot.pnl > 0 ? (0.01 + Math.random() * 0.01) : (Math.random() * 0.01 - 0.005);
+            value *= (1 + (selectedBot.pnl / 100 / 30) + fluctuation);
+        }
+        return data;
     }, [selectedBot]);
 
 

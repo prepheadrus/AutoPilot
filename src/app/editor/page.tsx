@@ -483,7 +483,11 @@ export default function StrategyEditorPage() {
         console.error("Bot kaydetme hatası:", error);
       }
     } else if (botName !== null) {
-        window.alert('İsim girmediniz, işlem iptal edildi.');
+        toast({
+            title: 'İşlem İptal Edildi',
+            description: 'Bot için bir isim girmediniz.',
+            variant: 'secondary'
+        });
     }
   };
   
@@ -599,6 +603,11 @@ export default function StrategyEditorPage() {
                             <XIcon className="h-5 w-5"/>
                         </Button>
                     </div>
+                     {isBacktesting ? (
+                        <div className="flex flex-1 items-center justify-center">
+                            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                        </div>
+                    ) : (
                     <div className="p-4 md:p-6 flex-1 min-h-0 grid grid-rows-[auto,1fr] gap-6">
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                             <div className="rounded-lg bg-slate-800/50 p-3">
@@ -684,6 +693,7 @@ export default function StrategyEditorPage() {
                             </ResponsiveContainer>
                         </div>
                     </div>
+                    )}
                 </div>
             </div>
         )}
