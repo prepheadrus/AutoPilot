@@ -115,7 +115,7 @@ export default function BotStatusPage() {
                                         <Button variant="ghost" size="icon" onClick={() => handleToggleStatus(bot.id)} aria-label={config.action}>
                                             {config.icon}
                                         </Button>
-                                         <Button variant="ghost" size="icon" disabled>
+                                         <Button variant="ghost" size="icon">
                                             <Settings className="h-4 w-4"/>
                                         </Button>
                                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteBot(bot.id)} aria-label="Sil">
