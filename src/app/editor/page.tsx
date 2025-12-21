@@ -532,7 +532,7 @@ export default function StrategyEditorPage() {
   }, [backtestResult]);
 
   return (
-    <div className="flex h-full w-full flex-row overflow-hidden">
+    <div className="flex flex-1 h-full w-full flex-row overflow-hidden">
         <aside className="w-64 flex-shrink-0 border-r border-slate-800 bg-slate-900 p-4 flex flex-col gap-2">
             <h3 className="font-bold text-lg text-foreground mb-4 font-headline">Araç Kutusu</h3>
              <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('dataSource')}>
