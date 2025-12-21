@@ -29,7 +29,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
-import { RSI as RSICalculator } from 'technicalindicators';
+import { RSI as RSICalculator, MACD as MACDCalculator, SMA as SMACalculator } from 'technicalindicators';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -63,7 +63,7 @@ const initialNodes: Node[] = [
     id: '3',
     type: 'action',
     position: { x: 650, y: 150 },
-    data: { label: 'Alış Emri', actionType: 'buy', amount: 100 }
+    data: { label: 'Alış Emri', actionType: 'buy' }
   },
 ];
 
@@ -93,58 +93,64 @@ type BacktestResult = {
 
 // --- START: Mock Data & Backtest Engine ---
 
-const generateMockOHLCData = (numCandles = 100) => {
-    let price = 65000 + Math.random() * 5000;
+const generateMockOHLCData = (numCandles = 200, basePrice = 65000) => {
+    let price = basePrice * (0.95 + Math.random() * 0.1);
     const data = [];
     for (let i = 0; i < numCandles; i++) {
         const open = price;
-        const high = open * (1 + Math.random() * 0.02);
-        const low = open * (1 - Math.random() * 0.02);
+        const high = open * (1 + (Math.random() - 0.45) * 0.04); // Widen fluctuation
+        const low = open * (1 - (Math.random() - 0.45) * 0.04);
         const close = low + Math.random() * (high - low);
         price = close;
         data.push({
             time: `D${i+1}`,
-            date: new Date(2024, 0, i + 1), // Add date object for better axis
+            date: new Date(2024, 0, i + 1),
             price: close,
-            ohlc: [open, high, low, close]
+            open,
+            high,
+            low,
+            close,
         });
     }
     return data;
 };
 
+
 // The core backtesting engine
 const runBacktestEngine = (nodes: Node[], edges: Edge[]): BacktestResult => {
-    // 1. Parse Strategy from nodes
-    const indicatorNode = nodes.find(n => n.type === 'indicator');
-    const logicNode = nodes.find(n => n.type === 'logic');
-    
-    // Default strategy if parsing fails
-    const strategy = {
-      indicator: indicatorNode?.data.indicatorType || 'rsi',
-      period: indicatorNode?.data.period || 14,
-      buyConditionOp: logicNode?.data.operator || 'lt',
-      buyConditionVal: logicNode?.data.value || 30,
-      sellConditionOp: 'gt', // Hardcoded exit strategy
-      sellConditionVal: 70,  // Hardcoded exit strategy
-    }
-    
-    // 2. Generate data and calculate indicators
-    const ohlcData = generateMockOHLCData(100);
+    // 1. Generate base data
+    const ohlcData = generateMockOHLCData(200, 65000);
     const closePrices = ohlcData.map(d => d.price);
-    let indicatorValues: (number | undefined)[] = [];
 
-    if(strategy.indicator === 'rsi') {
-      const rsiOutput = RSICalculator.calculate({ values: closePrices, period: strategy.period });
-      // Pad beginning with undefined to match length
-      indicatorValues = Array(strategy.period - 1).fill(undefined).concat(rsiOutput);
-    }
-    // (Future: Add SMA, EMA etc. here with else if)
+    // 2. Calculate all indicators present on the graph
+    const indicatorNodes = nodes.filter(n => n.type === 'indicator');
+    const signals: Record<string, (number | undefined)[]> = {};
 
-    const chartData = ohlcData.map((d, i) => ({...d, rsi: indicatorValues[i]}));
+    indicatorNodes.forEach(node => {
+        const { indicatorType, period } = node.data;
+        if (indicatorType === 'rsi') {
+            const rsiOutput = RSICalculator.calculate({ values: closePrices, period: period || 14 });
+            signals[node.id] = Array(closePrices.length - rsiOutput.length).fill(undefined).concat(rsiOutput);
+        } else if (indicatorType === 'sma') {
+            const smaOutput = SMACalculator.calculate({ values: closePrices, period: period || 20 });
+            signals[node.id] = Array(closePrices.length - smaOutput.length).fill(undefined).concat(smaOutput);
+        } else if (indicatorType === 'ema') {
+            const emaOutput = SMACalculator.calculate({ values: closePrices, period: period || 20 }); // EMA is also a type of MA
+            signals[node.id] = Array(closePrices.length - emaOutput.length).fill(undefined).concat(emaOutput);
+        }
+        // Future: Add MACD etc. here
+    });
 
-    // 3. Simulate Trades
+    const chartDataWithIndicators = ohlcData.map((d, i) => {
+        const enrichedData: any = { ...d };
+        for (const nodeId in signals) {
+            enrichedData[nodeId] = signals[nodeId][i];
+        }
+        return enrichedData;
+    });
+
+    // 3. Trading Simulation
     let inPosition = false;
-    let entryPrice = 0;
     let portfolioValue = 10000;
     const pnlData = [{ time: 'D0', pnl: portfolioValue }];
     const trades = [];
@@ -154,41 +160,77 @@ const runBacktestEngine = (nodes: Node[], edges: Edge[]): BacktestResult => {
     let totalLoss = 0;
     let winningTrades = 0;
     let losingTrades = 0;
+    const actionNodes = nodes.filter(n => n.type === 'action');
 
-    for (let i = 1; i < chartData.length; i++) {
-        const rsi = chartData[i].rsi;
-        if (!rsi) {
-            pnlData.push({ time: chartData[i].time, pnl: portfolioValue });
-            continue;
-        };
+    const checkConditionsForAction = (candleIndex: number, actionNodeId: string): boolean => {
+        const connectedLogicEdges = edges.filter(e => e.target === actionNodeId);
+        if (connectedLogicEdges.length === 0) return false;
 
-        const buyCondition = strategy.buyConditionOp === 'lt' ? rsi < strategy.buyConditionVal : rsi > strategy.buyConditionVal;
-        const sellCondition = strategy.sellConditionOp === 'gt' ? rsi > strategy.sellConditionVal : rsi < strategy.sellConditionVal;
+        // AND logic: all connected conditions must be true
+        return connectedLogicEdges.every(edge => {
+            const logicNode = nodes.find(n => n.id === edge.source);
+            if (!logicNode || logicNode.type !== 'logic') return false;
 
-        if (buyCondition && !inPosition) {
-            // BUY
-            inPosition = true;
-            entryPrice = chartData[i].price;
-            trades.push({ time: chartData[i].time, type: 'buy', price: entryPrice });
-        } else if (sellCondition && inPosition) {
-            // SELL
-            const exitPrice = chartData[i].price;
-            const profit = exitPrice - entryPrice;
-            if (profit > 0) {
-              totalProfit += profit;
-              winningTrades++;
-            } else {
-              totalLoss += Math.abs(profit);
-              losingTrades++;
-            }
-            portfolioValue += profit;
-            inPosition = false;
-            trades.push({ time: chartData[i].time, type: 'sell', price: exitPrice });
+            const connectedIndicatorEdges = edges.filter(e => e.target === logicNode.id);
+            if (connectedIndicatorEdges.length === 0) return false;
+            
+            // For a logic node, check its condition
+            return connectedIndicatorEdges.every(indEdge => {
+                const indicatorNode = nodes.find(n => n.id === indEdge.source);
+                if (!indicatorNode) return false;
+
+                const indicatorValue = signals[indicatorNode.id]?.[candleIndex];
+                if (indicatorValue === undefined) return false;
+
+                const { operator, value: thresholdValue } = logicNode.data;
+                
+                switch (operator) {
+                    case 'gt': return indicatorValue > thresholdValue;
+                    case 'lt': return indicatorValue < thresholdValue;
+                    // TODO: Implement crossover logic if needed
+                    default: return false;
+                }
+            });
+        });
+    };
+
+    for (let i = 1; i < chartDataWithIndicators.length; i++) {
+        const candle = chartDataWithIndicators[i];
+        const buyAction = actionNodes.find(n => n.data.actionType === 'buy');
+        const sellAction = actionNodes.find(n => n.data.actionType === 'sell');
+        
+        let shouldBuy = false;
+        if (buyAction) {
+            shouldBuy = checkConditionsForAction(i, buyAction.id);
         }
 
-        pnlData.push({ time: chartData[i].time, pnl: portfolioValue });
+        let shouldSell = false;
+        if (sellAction) {
+            shouldSell = checkConditionsForAction(i, sellAction.id);
+        }
 
-        // Calculate drawdown
+        if (shouldBuy && !inPosition) {
+            inPosition = true;
+            trades.push({ time: candle.time, type: 'buy', price: candle.price });
+        } else if (shouldSell && inPosition) {
+            const entryTrade = trades.filter(t => t.type === 'buy').pop();
+            if(entryTrade) {
+                const profit = candle.price - entryTrade.price;
+                 if (profit > 0) {
+                    totalProfit += profit;
+                    winningTrades++;
+                } else {
+                    totalLoss += Math.abs(profit);
+                    losingTrades++;
+                }
+                portfolioValue += profit;
+            }
+            inPosition = false;
+            trades.push({ time: candle.time, type: 'sell', price: candle.price });
+        }
+
+        pnlData.push({ time: candle.time, pnl: portfolioValue });
+
         if (portfolioValue > peakPortfolio) {
             peakPortfolio = portfolioValue;
         }
@@ -198,7 +240,7 @@ const runBacktestEngine = (nodes: Node[], edges: Edge[]): BacktestResult => {
         }
     }
 
-    const totalTrades = trades.length / 2;
+    const totalTrades = Math.floor(trades.length / 2);
     const stats = {
       netProfit: (portfolioValue - 10000) / 10000 * 100,
       totalTrades: totalTrades,
@@ -207,7 +249,17 @@ const runBacktestEngine = (nodes: Node[], edges: Edge[]): BacktestResult => {
       profitFactor: totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0,
     }
 
-    return { ohlcData: chartData, tradeData: trades, pnlData, stats };
+    // Add indicator values to ohlcData for the chart tooltip
+    const finalChartData = chartDataWithIndicators.map((d, i) => {
+        const dataPoint = {...d};
+        indicatorNodes.forEach(node => {
+            const indicatorKey = `${node.data.indicatorType.toUpperCase()}(${node.data.period})`;
+            dataPoint[indicatorKey] = signals[node.id]?.[i];
+        });
+        return dataPoint;
+    });
+
+    return { ohlcData: finalChartData, tradeData: trades, pnlData, stats };
 };
 
 const initialStrategyConfig: BotConfig = {
@@ -223,7 +275,7 @@ const initialStrategyConfig: BotConfig = {
 // Custom Shape for Scatter Markers
 const TradeMarker = (props: any) => {
     const { cx, cy, payload } = props;
-    if (!payload.type) return null;
+    if (!payload || !payload.type) return null;
     const isBuy = payload.type === 'buy';
     const markerY = isBuy ? cy + 10 : cy - 10;
     
@@ -238,8 +290,6 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
     if (active && payload && payload.length) {
         const priceData = payload.find(p => p.dataKey === 'price')?.payload;
         const pnlData = payload.find(p => p.dataKey === 'pnl');
-        
-        // Find trade by looking into the full payload, not a separate mock array
         const trade = payload.find(p => p.dataKey === 'tradeMarker')?.payload;
 
         return (
@@ -247,7 +297,9 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
                 <p className="font-bold">{`Tarih: ${label}`}</p>
                 {priceData && <p>Fiyat: <span className="font-mono">${priceData.price.toFixed(2)}</span></p>}
                 {pnlData && <p>Kâr: <span className="font-mono">${pnlData.value?.toFixed(2)}</span></p>}
-                {priceData && priceData.rsi && <p>RSI: <span className="font-mono">{priceData.rsi.toFixed(2)}</span></p>}
+                {priceData && Object.keys(priceData).filter(k => k.includes('(')).map(key => (
+                     priceData[key] && <p key={key}>{key}: <span className="font-mono">{priceData[key].toFixed(2)}</span></p>
+                ))}
                 {trade && trade.type && (
                      <p className={`font-bold mt-2 ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
                         {trade.type.toUpperCase()} @ ${trade.price?.toFixed(2)}
@@ -297,7 +349,7 @@ export default function StrategyEditorPage() {
       nodeData = { label: nodeLabel, operator: 'lt', value: 30 };
     } else if (type === 'action') {
       nodeLabel = 'Yeni İşlem';
-      nodeData = { label: nodeLabel, actionType: 'buy', amount: 100 };
+      nodeData = { label: nodeLabel, actionType: 'buy' };
     }
 
     const newNode: Node = {
@@ -411,9 +463,15 @@ export default function StrategyEditorPage() {
       return {
         ...ohlc,
         pnl: pnl?.pnl,
-        tradeMarker: trade, // for scatter plot
+        tradeMarker: trade ? { ...trade, price: ohlc.price } : undefined,
       };
     });
+  }, [backtestResult]);
+  
+  const indicatorKeys = useMemo(() => {
+    if (!backtestResult || !backtestResult.ohlcData.length) return [];
+    const firstDataPoint = backtestResult.ohlcData[0];
+    return Object.keys(firstDataPoint).filter(key => key.includes('('));
   }, [backtestResult]);
 
   return (
@@ -512,47 +570,56 @@ export default function StrategyEditorPage() {
                                <ComposedChart data={chartAndTradeData} syncId="backtestChart">
                                     <defs>
                                         <linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
-                                            <stop offset="95%" stopColor="#8884d8" stopOpacity={0.1}/>
+                                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
+                                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
                                     <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
                                     <YAxis 
-                                        yAxisId="left" 
+                                        yAxisId="pnl" 
                                         orientation="left"
                                         domain={['auto', 'auto']} 
                                         tickFormatter={(val: number) => `$${val.toLocaleString()}`}
                                         tick={{fontSize: 12}}
-                                        stroke="#8884d8"
+                                        stroke="hsl(var(--primary))"
                                     />
                                     <YAxis 
-                                        yAxisId="right" 
+                                        yAxisId="price" 
                                         orientation="right"
                                         domain={['dataMin * 0.98', 'dataMax * 1.02']} 
                                         tickFormatter={(val: number) => `$${(val/1000).toFixed(1)}k`}
                                         tick={{fontSize: 12}}
-                                        stroke="#82ca9d"
+                                        stroke="hsl(var(--accent))"
                                     />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Legend />
                                     
-                                    <Area yAxisId="left" type="monotone" dataKey="pnl" name="Kümülatif Kâr" stroke="#8884d8" fill="url(#colorPnl)" />
+                                    <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Kümülatif Kâr" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
                                     
-                                    <Line yAxisId="right" type="monotone" dataKey="price" name="Fiyat" stroke="#82ca9d" dot={false} />
+                                    <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" dot={false} strokeWidth={2} />
                                     
-                                    <Scatter yAxisId="right" name="İşlemler" dataKey="tradeMarker" shape={<TradeMarker />} />
+                                    <Scatter yAxisId="price" name="İşlemler" dataKey="tradeMarker.price" fill="transparent" shape={<TradeMarker />} />
                                 </ComposedChart>
                             </ResponsiveContainer>
                             <ResponsiveContainer width="100%" height="30%">
                                 <ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}>
                                     <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
                                     <XAxis dataKey="time" hide={true}/>
-                                    <YAxis yAxisId="rsi" orientation="right" domain={[0, 100]} tickCount={3} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                    <YAxis yAxisId="indicator" orientation="right" domain={[0, 100]} tickCount={3} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
                                     <Tooltip content={<CustomTooltip />} />
-                                    <ReferenceLine yAxisId="rsi" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
-                                    <ReferenceLine yAxisId="rsi" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
-                                    <Area yAxisId="rsi" type="monotone" dataKey="rsi" stroke="#eab308" fill="#eab308" fillOpacity={0.2} name="RSI"/>
+                                    {indicatorKeys.map(key => {
+                                        if (key.startsWith('RSI')) {
+                                            return [
+                                                <ReferenceLine key="ref-70" yAxisId="indicator" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />,
+                                                <ReferenceLine key="ref-30" yAxisId="indicator" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
+                                            ];
+                                        }
+                                        return null;
+                                    })}
+                                    {indicatorKeys.map((key, index) => (
+                                        <Line key={key} yAxisId="indicator" type="monotone" dataKey={key} stroke={["#eab308", "#3b82f6"][index % 2]} fillOpacity={0.2} name={key} dot={false}/>
+                                    ))}
                                 </ComposedChart>
                             </ResponsiveContainer>
                         </div>
@@ -642,3 +709,5 @@ export default function StrategyEditorPage() {
     </div>
   );
 }
+
+    

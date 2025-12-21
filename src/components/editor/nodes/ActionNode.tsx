@@ -1,31 +1,32 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeProps, useReactFlow } from '@xyflow/react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { CircleDollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export function ActionNode({ data, id }: NodeProps<{ label: string, onDataChange?: () => any, actionType?: string, amount?: number }>) {
+export function ActionNode({ data, id }: NodeProps<{ label: string, actionType?: string }>) {
+  const { setNodes } = useReactFlow();
   const [action, setAction] = useState(data.actionType || 'buy');
 
-  const actionTypeRef = useRef(data.actionType || 'buy');
-  const amountRef = useRef(data.amount || 100);
-
   useEffect(() => {
-    data.onDataChange = () => ({
-      actionType: actionTypeRef.current,
-      amount: amountRef.current,
-    });
-  }, [data]);
-
-
-  const handleActionChange = (value: string) => {
-    setAction(value);
-    actionTypeRef.current = value;
-  }
+    // Update the node's internal data when the action type changes
+    // This makes the data accessible to the backtest engine
+    setNodes((nodes) =>
+      nodes.map((node) => {
+        if (node.id === id) {
+          node.data = {
+            ...node.data,
+            actionType: action,
+          };
+        }
+        return node;
+      })
+    );
+  }, [action, id, setNodes]);
 
   const borderColor = action === 'buy' ? 'border-l-green-500' : 'border-l-red-500';
   const iconColor = action === 'buy' ? 'text-green-400' : 'text-red-400';
@@ -41,7 +42,7 @@ export function ActionNode({ data, id }: NodeProps<{ label: string, onDataChange
       <div className="p-3 space-y-4">
         <div className="space-y-2">
             <Label htmlFor={`${id}-action-type`}>İşlem</Label>
-            <Select defaultValue={actionTypeRef.current} onValueChange={handleActionChange}>
+            <Select defaultValue={action} onValueChange={setAction}>
                 <SelectTrigger id={`${id}-action-type`} className="bg-slate-700 border-slate-600 text-white">
                     <SelectValue placeholder="İşlem seçin" />
                 </SelectTrigger>
@@ -51,12 +52,10 @@ export function ActionNode({ data, id }: NodeProps<{ label: string, onDataChange
                 </SelectContent>
             </Select>
         </div>
-        <div className="space-y-2">
-            <Label htmlFor={`${id}-amount`}>Miktar (USDT)</Label>
-            <Input id={`${id}-amount`} type="number" defaultValue={amountRef.current} onChange={(e) => (amountRef.current = parseInt(e.target.value, 10))} className="bg-slate-700 border-slate-600 text-white" />
-        </div>
       </div>
       <Handle type="target" position={Position.Left} className={cn("w-3 h-3", action === 'buy' ? '!bg-green-400' : '!bg-red-400')} />
     </div>
   );
 }
+
+    

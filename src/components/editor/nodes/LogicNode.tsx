@@ -1,22 +1,25 @@
 'use client';
 
-import React, { useRef, useEffect } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import React from 'react';
+import { Handle, Position, NodeProps, useReactFlow } from '@xyflow/react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { GitBranch } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
-export function LogicNode({ data, id }: NodeProps<{ label: string, onDataChange?: () => any, operator?: string, value?: number }>) {
-    const operatorRef = useRef(data.operator || 'lt');
-    const valueRef = useRef(data.value || 30);
+export function LogicNode({ data, id }: NodeProps<{ operator?: string, value?: number }>) {
+    const { setNodes } = useReactFlow();
 
-    useEffect(() => {
-        data.onDataChange = () => ({
-            operator: operatorRef.current,
-            value: valueRef.current,
-        });
-    }, [data]);
+    const updateNodeData = (key: string, value: any) => {
+        setNodes((nodes) =>
+          nodes.map((node) => {
+            if (node.id === id) {
+              node.data = { ...node.data, [key]: value };
+            }
+            return node;
+          })
+        );
+    };
 
   return (
     <div className="bg-slate-800 border-2 border-slate-400 border-l-4 border-l-purple-500 rounded-lg shadow-xl w-64 text-white">
@@ -29,20 +32,28 @@ export function LogicNode({ data, id }: NodeProps<{ label: string, onDataChange?
       <div className="p-3 space-y-4">
         <div className="space-y-2">
             <Label htmlFor={`${id}-operator`}>Operatör</Label>
-            <Select defaultValue={operatorRef.current} onValueChange={(value) => (operatorRef.current = value)}>
+            <Select 
+                defaultValue={data.operator || 'lt'} 
+                onValueChange={(value) => updateNodeData('operator', value)}
+            >
                 <SelectTrigger id={`${id}-operator`} className="bg-slate-700 border-slate-600 text-white">
                     <SelectValue placeholder="Operatör seçin" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-600 text-white">
                     <SelectItem value="gt">Büyüktür (&gt;)</SelectItem>
                     <SelectItem value="lt">Küçüktür (&lt;)</SelectItem>
-                    <SelectItem value="crossover">Kesişim</SelectItem>
+                    <SelectItem value="crossover">Kesişim (Yakında)</SelectItem>
                 </SelectContent>
             </Select>
         </div>
          <div className="space-y-2">
             <Label htmlFor={`${id}-value`}>Değer</Label>
-            <Input id={`${id}-value`} type="number" defaultValue={valueRef.current} onChange={(e) => (valueRef.current = parseInt(e.target.value, 10))} className="bg-slate-700 border-slate-600 text-white" />
+            <Input 
+                id={`${id}-value`} 
+                type="number" 
+                defaultValue={data.value || 30} 
+                onChange={(e) => updateNodeData('value', parseInt(e.target.value, 10))} 
+                className="bg-slate-700 border-slate-600 text-white" />
         </div>
       </div>
       <Handle type="target" position={Position.Left} className="!bg-purple-400 w-3 h-3" />
@@ -50,3 +61,5 @@ export function LogicNode({ data, id }: NodeProps<{ label: string, onDataChange?
     </div>
   );
 }
+
+    
