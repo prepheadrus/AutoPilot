@@ -22,18 +22,38 @@ export function IndicatorNode({ data, id }: NodeProps<{
   const { toast } = useToast();
   const indicatorType = data.indicatorType || 'rsi';
 
-  // Helper to update node data
-  const updateNodeData = (key: string, value: any) => {
+  const updateNodeData = (newData: Partial<typeof data>) => {
     setNodes((nodes) =>
       nodes.map((node) => {
         if (node.id === id) {
-          node.data = { ...node.data, [key]: value };
+          // Preserve existing data and only update the new fields
+          node.data = { ...node.data, ...newData };
         }
         return node;
       })
     );
   };
   
+  const handleTypeChange = (newType: string) => {
+    const newData: any = { indicatorType: newType };
+    // Set default values when changing indicator type
+    switch (newType) {
+        case 'rsi':
+            newData.period = 14;
+            break;
+        case 'sma':
+        case 'ema':
+            newData.period = 20;
+            break;
+        case 'macd':
+            newData.fastPeriod = 12;
+            newData.slowPeriod = 26;
+            newData.signalPeriod = 9;
+            break;
+    }
+    updateNodeData(newData);
+  };
+
   const handleOptimizeClick = () => {
     toast({
         title: "Optimizasyon Başlatıldı...",
@@ -58,8 +78,8 @@ export function IndicatorNode({ data, id }: NodeProps<{
         <div className="space-y-2">
             <Label htmlFor={`${id}-indicator-type`}>İndikatör Tipi</Label>
             <Select 
-              defaultValue={indicatorType} 
-              onValueChange={(value) => updateNodeData('indicatorType', value)}
+              value={indicatorType} 
+              onValueChange={handleTypeChange}
             >
                 <SelectTrigger id={`${id}-indicator-type`} className="bg-slate-700 border-slate-600 text-white">
                     <SelectValue placeholder="İndikatör seçin" />
@@ -77,15 +97,15 @@ export function IndicatorNode({ data, id }: NodeProps<{
             <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-2">
                     <Label htmlFor={`${id}-fast`} className="text-xs">Hızlı</Label>
-                    <Input id={`${id}-fast`} type="number" defaultValue={data.fastPeriod || 12} onChange={(e) => updateNodeData('fastPeriod', parseInt(e.target.value, 10))} className="bg-slate-700 border-slate-600 text-white h-8"/>
+                    <Input id={`${id}-fast`} type="number" value={data.fastPeriod || 12} onChange={(e) => updateNodeData({ fastPeriod: parseInt(e.target.value, 10) })} className="bg-slate-700 border-slate-600 text-white h-8"/>
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor={`${id}-slow`} className="text-xs">Yavaş</Label>
-                    <Input id={`${id}-slow`} type="number" defaultValue={data.slowPeriod || 26} onChange={(e) => updateNodeData('slowPeriod', parseInt(e.target.value, 10))} className="bg-slate-700 border-slate-600 text-white h-8"/>
+                    <Input id={`${id}-slow`} type="number" value={data.slowPeriod || 26} onChange={(e) => updateNodeData({ slowPeriod: parseInt(e.target.value, 10) })} className="bg-slate-700 border-slate-600 text-white h-8"/>
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor={`${id}-signal`} className="text-xs">Sinyal</Label>
-                    <Input id={`${id}-signal`} type="number" defaultValue={data.signalPeriod || 9} onChange={(e) => updateNodeData('signalPeriod', parseInt(e.target.value, 10))} className="bg-slate-700 border-slate-600 text-white h-8"/>
+                    <Input id={`${id}-signal`} type="number" value={data.signalPeriod || 9} onChange={(e) => updateNodeData({ signalPeriod: parseInt(e.target.value, 10) })} className="bg-slate-700 border-slate-600 text-white h-8"/>
                 </div>
             </div>
         ) : (
@@ -94,19 +114,28 @@ export function IndicatorNode({ data, id }: NodeProps<{
                 <Input 
                     id={`${id}-period`} 
                     type="number" 
-                    key={data.period} // Add key to force re-render on data change
+                    key={data.period} 
                     defaultValue={data.period || 14} 
-                    onChange={(e) => updateNodeData('period', parseInt(e.target.value, 10))}
+                    onBlur={(e) => updateNodeData({ period: parseInt(e.target.value, 10) })}
                     className="bg-slate-700 border-slate-600 text-white" 
                 />
             </div>
         )}
-
-        <Button onClick={handleOptimizeClick} variant="outline" size="sm" className="w-full gap-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300" disabled={isMACD}>
-            <Zap className="h-4 w-4" />
-            Periyodu Optimize Et
-        </Button>
-         {isMACD && <p className="text-xs text-muted-foreground text-center -mt-2">MACD optimizasyonu yakında gelecek.</p>}
+        
+        {isMACD ? (
+            <div className="pt-1">
+                 <Button variant="outline" size="sm" className="w-full gap-2" disabled>
+                    <Zap className="h-4 w-4" />
+                    Periyodu Optimize Et
+                 </Button>
+                 <p className="text-xs text-muted-foreground text-center mt-2">MACD optimizasyonu yakında gelecek.</p>
+            </div>
+        ) : (
+             <Button onClick={handleOptimizeClick} variant="outline" size="sm" className="w-full gap-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300">
+                <Zap className="h-4 w-4" />
+                Periyodu Optimize Et
+            </Button>
+        )}
       </div>
       <Handle type="target" position={Position.Left} className={cn("w-3 h-3 !bg-blue-400")} />
       <Handle type="source" position={Position.Right} className="!bg-blue-400 w-3 h-3" />
