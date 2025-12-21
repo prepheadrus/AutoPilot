@@ -1,111 +1,144 @@
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CandlestickChart, AlertTriangle } from "lucide-react";
-import ccxt from "ccxt";
+'use client';
+
+import { useState, useEffect, useRef, memo } from 'react';
+import Link from 'next/link';
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Search, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type MarketData = {
-  symbol: string;
-  price: number;
-  change: number;
-  volume: number;
-};
+// Mock data for the market list
+const marketListData = [
+  { symbol: "BTC", name: "Bitcoin", price: 68543.21, change: 2.34 },
+  { symbol: "ETH", name: "Ethereum", price: 3567.89, change: -1.12 },
+  { symbol: "SOL", name: "Solana", price: 165.43, change: 5.89 },
+  { symbol: "BNB", name: "Binance Coin", price: 598.12, change: 0.55 },
+  { symbol: "AVAX", name: "Avalanche", price: 36.78, change: 10.23 },
+  { symbol: "DOT", name: "Polkadot", price: 7.50, change: -3.45 },
+  { symbol: "MATIC", name: "Polygon", price: 0.72, change: 1.88 },
+  { symbol: "LINK", name: "Chainlink", price: 18.25, change: 4.10 },
+  { symbol: "XRP", name: "Ripple", price: 0.52, change: -0.98 },
+  { symbol: "ADA", name: "Cardano", price: 0.45, change: 2.15 },
+  { symbol: "DOGE", name: "Dogecoin", price: 0.16, change: 7.77 },
+];
 
-async function getMarketData(): Promise<{ data: MarketData[]; isDemo: boolean }> {
-  const symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "AVAX/USDT"];
-  let isDemo = false;
+// Memoized TradingView Widget to prevent re-renders on parent state changes
+const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
+  const container = useRef<HTMLDivElement>(null);
 
-  try {
-    const exchange = new ccxt.binance();
-    const tickers = await exchange.fetchTickers(symbols);
-
-    if (!tickers || Object.keys(tickers).length === 0) {
-      throw new Error("Borsadan veri alınamadı.");
+  useEffect(() => {
+    if (container.current && typeof window !== 'undefined') {
+      // Clear previous widget
+      container.current.innerHTML = '';
+      
+      const script = document.createElement("script");
+      script.src = "https://s3.tradingview.com/tv.js";
+      script.type = "text/javascript";
+      script.async = true;
+      script.onload = () => {
+        if (typeof (window as any).TradingView !== 'undefined') {
+          new (window as any).TradingView.widget({
+            autosize: true,
+            symbol: `BINANCE:${symbol.toUpperCase()}USDT`,
+            interval: "D",
+            timezone: "Etc/UTC",
+            theme: "dark",
+            style: "1",
+            locale: "tr",
+            toolbar_bg: "#f1f3f6",
+            enable_publishing: false,
+            withdateranges: true,
+            hide_side_toolbar: false,
+            allow_symbol_change: true,
+            container_id: `tradingview_${symbol}`
+          });
+        }
+      };
+      container.current.appendChild(script);
     }
-    
-    const data: MarketData[] = Object.values(tickers).map((ticker) => ({
-      symbol: ticker.symbol.replace('/USDT', ''),
-      price: ticker.last ?? 0,
-      change: ticker.percentage ?? 0,
-      volume: ticker.quoteVolume ?? 0,
-    }));
-
-    return { data, isDemo };
-
-  } catch (error) {
-    console.warn("Binance API'sine erişilemedi, simülasyon verileri kullanılıyor:", error);
-    isDemo = true;
-    const demoData: MarketData[] = [
-      { symbol: "BTC", price: 68543.21 + (Math.random() - 0.5) * 1000, change: (Math.random() - 0.4) * 5, volume: 2500000000 + Math.random() * 500000000 },
-      { symbol: "ETH", price: 3567.89 + (Math.random() - 0.5) * 100, change: (Math.random() - 0.6) * 6, volume: 1200000000 + Math.random() * 200000000 },
-      { symbol: "SOL", price: 165.43 + (Math.random() - 0.5) * 10, change: (Math.random() - 0.3) * 8, volume: 800000000 + Math.random() * 100000000 },
-      { symbol: "BNB", price: 598.12 + (Math.random() - 0.5) * 20, change: (Math.random() - 0.5) * 4, volume: 450000000 + Math.random() * 50000000 },
-      { symbol: "AVAX", price: 36.78 + (Math.random() - 0.5) * 5, change: (Math.random() - 0.2) * 10, volume: 300000000 + Math.random() * 40000000 },
-    ];
-    return { data: demoData, isDemo };
-  }
-}
-
-export default async function MarketPage() {
-  const { data, isDemo } = await getMarketData();
+  }, [symbol]);
 
   return (
-    <div className="space-y-6">
-      {isDemo && (
-        <Alert variant="destructive" className="bg-yellow-800/20 border-yellow-700 text-yellow-300 [&>svg]:text-yellow-400">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Demo Modu Aktif</AlertTitle>
-          <AlertDescription>
-            Canlı borsa verileri alınamadı. Şu anda simülasyon verileri gösterilmektedir.
-          </AlertDescription>
-        </Alert>
-      )}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-             <CandlestickChart className="h-6 w-6 text-primary" />
-             <CardTitle className="font-headline text-2xl">Canlı Kripto Piyasası</CardTitle>
-          </div>
-          <CardDescription>Popüler kripto varlıkların anlık piyasa verileri</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[120px]">Sembol</TableHead>
-                <TableHead>Fiyat</TableHead>
-                <TableHead>24s Değişim</TableHead>
-                <TableHead className="text-right">24s Hacim (USDT)</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((coin) => (
-                <TableRow key={coin.symbol}>
-                  <TableCell className="font-bold text-lg">{coin.symbol}</TableCell>
-                  <TableCell className="font-mono">${coin.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                  <TableCell
-                    className={cn(
-                      "font-semibold",
-                      coin.change >= 0 ? "text-green-500" : "text-red-500"
-                    )}
-                  >
-                    {coin.change.toFixed(2)}%
-                  </TableCell>
-                  <TableCell className="text-right font-mono">${coin.volume.toLocaleString('en-US', { notation: 'compact', compactDisplay: 'short' })}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+    <div className="tradingview-widget-container h-full" ref={container}>
+      <div id={`tradingview_${symbol}`} className="h-full" />
+    </div>
+  );
+});
+
+TradingViewWidget.displayName = 'TradingViewWidget';
+
+
+export default function MarketTerminalPage() {
+  const [selectedSymbol, setSelectedSymbol] = useState("BTC");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredMarkets = marketListData.filter(coin =>
+    coin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    coin.symbol.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="flex h-full w-full flex-row overflow-hidden border border-slate-800 rounded-lg bg-slate-950">
+        {/* Left Panel: Market List */}
+        <aside className="w-1/4 flex-shrink-0 border-r border-slate-800 bg-slate-900/50 flex flex-col">
+            <div className="p-4 border-b border-slate-800">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="text"
+                        placeholder="Piyasa ara..."
+                        className="bg-slate-800 border-slate-700 pl-9"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+                <div className="grid grid-cols-3 gap-2 p-2 border-b border-slate-800 text-xs text-muted-foreground sticky top-0 bg-slate-900/50 z-10">
+                    <div className="font-semibold">Sembol</div>
+                    <div className="text-right font-semibold">Fiyat</div>
+                    <div className="text-right font-semibold">24s Değişim</div>
+                </div>
+                <ul>
+                    {filteredMarkets.map((coin) => (
+                        <li key={coin.symbol}>
+                            <button 
+                                className={cn(
+                                    "w-full p-2 grid grid-cols-3 gap-2 items-center text-sm text-left hover:bg-slate-800/50 rounded-md transition-colors",
+                                    selectedSymbol === coin.symbol && "bg-primary/10 text-primary"
+                                )}
+                                onClick={() => setSelectedSymbol(coin.symbol)}
+                            >
+                                <span className="font-bold">{coin.symbol}</span>
+                                <span className="font-mono text-right">${coin.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                <span className={cn(
+                                    "font-mono text-right",
+                                    coin.change >= 0 ? "text-green-500" : "text-red-500"
+                                )}>
+                                    {coin.change.toFixed(2)}%
+                                </span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        </aside>
+
+        {/* Right Panel: Chart and Actions */}
+        <main className="flex-1 flex flex-col">
+            <div className="flex h-16 items-center justify-between p-4 border-b border-slate-800">
+                <h1 className="text-xl font-headline font-bold text-white">{selectedSymbol}/USDT</h1>
+                <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                    <Link href="/editor">
+                        Bu Varlıkla Bot Oluştur <ArrowRight className="ml-2 h-4 w-4"/>
+                    </Link>
+                </Button>
+            </div>
+            <div className="flex-1 bg-background relative">
+                <TradingViewWidget symbol={selectedSymbol} />
+            </div>
+        </main>
     </div>
   );
 }
