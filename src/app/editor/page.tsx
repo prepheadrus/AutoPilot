@@ -54,7 +54,6 @@ const initialEdges: Edge[] = [
   { id: 'e2-3', source: '2', target: '3', markerEnd: { type: MarkerType.ArrowClosed } },
 ];
 
-
 const Sidebar = ({ onAddNode }: { onAddNode: (type: string) => void }) => {
     return (
         <aside className="w-64 flex-shrink-0 border-r bg-card p-4 flex flex-col gap-2">
@@ -88,9 +87,10 @@ export default function StrategyEditorPage() {
     const newNodeId = `${type}-${Date.now()}`;
     let nodeLabel = "Yeni Düğüm";
     let nodeData = {};
+    // Position the new node in the center of the viewport with some random offset
     const position = {
-        x: 250 + Math.random() * 200 - 100,
-        y: 100 + Math.random() * 200 - 100,
+        x: 400 + Math.random() * 200 - 100,
+        y: 200 + Math.random() * 200 - 100,
     };
 
     if (type === 'indicator') {
