@@ -132,7 +132,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className={cn(
-          "flex flex-col flex-1", 
+          "flex flex-1 flex-col", 
           isClient && isEditorPage ? "p-0 overflow-hidden" : "p-6 overflow-y-auto"
       )}>
           {children}

@@ -118,7 +118,7 @@ export default function MarketTerminalPage() {
   );
 
   return (
-    <div className="flex h-full w-full flex-row overflow-hidden rounded-lg bg-slate-950 border border-slate-800">
+    <div className="flex-1 flex flex-row overflow-hidden rounded-lg bg-slate-950 border border-slate-800">
         {/* Left Panel: Market List */}
         <aside className="w-1/4 flex-shrink-0 border-r border-slate-800 bg-slate-900/50 flex flex-col">
             <div className="p-4 border-b border-slate-800">
@@ -193,5 +193,3 @@ export default function MarketTerminalPage() {
     </div>
   );
 }
-
-    
