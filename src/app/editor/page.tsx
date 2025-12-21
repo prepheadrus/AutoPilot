@@ -38,15 +38,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from '@/components/ui/slider';
-import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown } from 'lucide-react';
+import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
+import { DataSourceNode } from '@/components/editor/nodes/DataSourceNode';
 import type { Bot, BotConfig } from '@/lib/types';
 import type { TooltipProps } from 'recharts';
 
 
 const initialNodes: Node[] = [
+   {
+    id: 'd1',
+    type: 'dataSource',
+    position: { x: -250, y: 150 },
+    data: { label: 'Veri Kaynağı', exchange: 'binance', symbol: 'BTC/USDT' }
+  },
   {
     id: '1',
     type: 'indicator',
@@ -68,6 +75,7 @@ const initialNodes: Node[] = [
 ];
 
 const initialEdges: Edge[] = [
+  { id: 'ed1-1', source: 'd1', target: '1', markerEnd: { type: MarkerType.ArrowClosed } },
   { id: 'e1-2', source: '1', target: '2', markerEnd: { type: MarkerType.ArrowClosed } },
   { id: 'e2-3', source: '2', target: '3', markerEnd: { type: MarkerType.ArrowClosed } },
 ];
@@ -76,6 +84,7 @@ const nodeTypes = {
   indicator: IndicatorNode,
   logic: LogicNode,
   action: ActionNode,
+  dataSource: DataSourceNode,
 };
 
 type BacktestResult = {
@@ -93,7 +102,12 @@ type BacktestResult = {
 
 // --- START: Mock Data & Backtest Engine ---
 
-const generateMockOHLCData = (numCandles = 200, basePrice = 65000) => {
+const generateMockOHLCData = (numCandles = 200, symbol = 'BTC/USDT') => {
+    let basePrice;
+    if (symbol.includes('SOL')) basePrice = 150;
+    else if (symbol.includes('ETH')) basePrice = 3500;
+    else basePrice = 65000;
+
     let price = basePrice * (0.95 + Math.random() * 0.1);
     const data = [];
     for (let i = 0; i < numCandles; i++) {
@@ -118,8 +132,10 @@ const generateMockOHLCData = (numCandles = 200, basePrice = 65000) => {
 
 // The core backtesting engine
 const runBacktestEngine = (nodes: Node[], edges: Edge[]): BacktestResult => {
-    // 1. Generate base data
-    const ohlcData = generateMockOHLCData(200, 65000);
+    // 1. Find data source and generate base data
+    const dataSourceNode = nodes.find(n => n.type === 'dataSource');
+    const symbol = dataSourceNode?.data.symbol || 'BTC/USDT';
+    const ohlcData = generateMockOHLCData(200, symbol);
     const closePrices = ohlcData.map(d => d.price);
 
     // 2. Calculate all indicators present on the graph
@@ -341,7 +357,10 @@ export default function StrategyEditorPage() {
         y: 100 + Math.random() * 150,
     };
 
-    if (type === 'indicator') {
+    if (type === 'dataSource') {
+        nodeLabel = 'Veri Kaynağı';
+        nodeData = { label: nodeLabel, exchange: 'binance', symbol: 'BTC/USDT' };
+    } else if (type === 'indicator') {
       nodeLabel = 'Yeni İndikatör';
       nodeData = { label: nodeLabel, indicatorType: 'rsi', period: 14 };
     } else if (type === 'logic') {
@@ -478,6 +497,9 @@ export default function StrategyEditorPage() {
     <div className="flex h-full w-full flex-row overflow-hidden">
         <aside className="w-64 flex-shrink-0 border-r border-slate-800 bg-slate-900 p-4 flex flex-col gap-2">
             <h3 className="font-bold text-lg text-foreground mb-4 font-headline">Araç Kutusu</h3>
+             <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('dataSource')}>
+                <Database className="text-yellow-500" /> Veri Kaynağı Ekle
+            </Button>
              <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('indicator')}>
                 <Rss className="text-blue-500" /> İndikatör Ekle
             </Button>
@@ -709,5 +731,3 @@ export default function StrategyEditorPage() {
     </div>
   );
 }
-
-    
