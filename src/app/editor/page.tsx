@@ -51,6 +51,12 @@ const initialEdges: Edge[] = [
   { id: 'e2-3', source: '2', target: '3', markerEnd: { type: MarkerType.ArrowClosed } },
 ];
 
+const nodeTypes = {
+  indicator: IndicatorNode,
+  logic: LogicNode,
+  action: ActionNode,
+};
+
 
 export default function StrategyEditorPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
