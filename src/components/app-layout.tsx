@@ -1,6 +1,7 @@
 
 "use client";
 
+import { useState, useEffect } from 'react';
 import { usePathname } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -59,9 +60,15 @@ function NavigationLinks({ inSheet = false }: { inSheet?: boolean }) {
 
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
+  const [isClient, setIsClient] = useState(false);
   const userAvatar = PlaceHolderImages.find(p => p.id === 'user-avatar') as ImagePlaceholder;
   const pathname = usePathname();
   const isEditorPage = pathname === '/editor';
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
@@ -126,7 +133,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       <main className={cn(
           "flex flex-col flex-1", 
-          isEditorPage ? "p-0 overflow-hidden" : "p-6 overflow-y-auto"
+          isClient && isEditorPage ? "p-0 overflow-hidden" : "p-6 overflow-y-auto"
       )}>
           {children}
       </main>
