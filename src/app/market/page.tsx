@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, memo, useId } from 'react';
+import { useState, useEffect, useRef, memo, useId, useCallback } from 'react';
 import Link from 'next/link';
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Skeleton } from '@/components/ui/skeleton';
 
 declare global {
     interface Window {
@@ -14,20 +15,12 @@ declare global {
     }
 }
 
-// Mock data for the market list
-const marketListData = [
-  { symbol: "BTC", name: "Bitcoin", price: 68543.21, change: 2.34 },
-  { symbol: "ETH", name: "Ethereum", price: 3567.89, change: -1.12 },
-  { symbol: "SOL", name: "Solana", price: 165.43, change: 5.89 },
-  { symbol: "BNB", name: "Binance Coin", price: 598.12, change: 0.55 },
-  { symbol: "AVAX", name: "Avalanche", price: 36.78, change: 10.23 },
-  { symbol: "DOT", name: "Polkadot", price: 7.50, change: -3.45 },
-  { symbol: "MATIC", name: "Polygon", price: 0.72, change: 1.88 },
-  { symbol: "LINK", name: "Chainlink", price: 18.25, change: 4.10 },
-  { symbol: "XRP", name: "Ripple", price: 0.52, change: -0.98 },
-  { symbol: "ADA", name: "Cardano", price: 0.45, change: 2.15 },
-  { symbol: "DOGE", name: "Dogecoin", price: 0.16, change: 7.77 },
-];
+type MarketCoin = {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+};
 
 // Memoized TradingView Widget to prevent re-renders on parent state changes
 const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
@@ -92,8 +85,33 @@ TradingViewWidget.displayName = 'TradingViewWidget';
 export default function MarketTerminalPage() {
   const [selectedSymbol, setSelectedSymbol] = useState("BTC");
   const [searchQuery, setSearchQuery] = useState("");
+  const [marketData, setMarketData] = useState<MarketCoin[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredMarkets = marketListData.filter(coin =>
+  const fetchMarketData = useCallback(async () => {
+      try {
+          const response = await fetch('/api/market-data');
+          if (!response.ok) {
+              throw new Error('Piyasa verileri alınamadı');
+          }
+          const data = await response.json();
+          setMarketData(data.tickers);
+      } catch (error) {
+          console.error(error);
+          // Optionally, show a toast notification
+      } finally {
+          setIsLoading(false);
+      }
+  }, []);
+
+  useEffect(() => {
+      fetchMarketData(); // Initial fetch
+      const interval = setInterval(fetchMarketData, 5000); // Fetch every 5 seconds
+      return () => clearInterval(interval);
+  }, [fetchMarketData]);
+
+
+  const filteredMarkets = marketData.filter(coin =>
     coin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     coin.symbol.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -120,28 +138,40 @@ export default function MarketTerminalPage() {
                     <div className="text-right font-semibold">Fiyat</div>
                     <div className="text-right font-semibold">24s Değişim</div>
                 </div>
-                <ul>
-                    {filteredMarkets.map((coin) => (
-                        <li key={coin.symbol}>
-                            <button 
-                                className={cn(
-                                    "w-full p-2 grid grid-cols-3 gap-2 items-center text-sm text-left hover:bg-slate-800/50 rounded-md transition-colors",
-                                    selectedSymbol === coin.symbol && "bg-primary/10 text-primary"
-                                )}
-                                onClick={() => setSelectedSymbol(coin.symbol)}
-                            >
-                                <span className="font-bold">{coin.symbol}</span>
-                                <span className="font-mono text-right">${coin.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                <span className={cn(
-                                    "font-mono text-right",
-                                    coin.change >= 0 ? "text-green-500" : "text-red-500"
-                                )}>
-                                    {coin.change.toFixed(2)}%
-                                </span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
+                {isLoading ? (
+                    <div className="p-2 space-y-2">
+                        {Array.from({ length: 10 }).map((_, i) => (
+                            <div key={i} className="grid grid-cols-3 gap-2 items-center">
+                                <Skeleton className="h-5 w-12" />
+                                <Skeleton className="h-5 w-20 justify-self-end" />
+                                <Skeleton className="h-5 w-10 justify-self-end" />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <ul>
+                        {filteredMarkets.map((coin) => (
+                            <li key={coin.symbol}>
+                                <button 
+                                    className={cn(
+                                        "w-full p-2 grid grid-cols-3 gap-2 items-center text-sm text-left hover:bg-slate-800/50 rounded-md transition-colors",
+                                        selectedSymbol === coin.symbol && "bg-primary/10 text-primary"
+                                    )}
+                                    onClick={() => setSelectedSymbol(coin.symbol)}
+                                >
+                                    <span className="font-bold">{coin.symbol}</span>
+                                    <span className="font-mono text-right">${coin.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    <span className={cn(
+                                        "font-mono text-right",
+                                        coin.change >= 0 ? "text-green-500" : "text-red-500"
+                                    )}>
+                                        {coin.change.toFixed(2)}%
+                                    </span>
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
             </div>
         </aside>
 
@@ -150,7 +180,7 @@ export default function MarketTerminalPage() {
             <div className="flex h-16 items-center justify-between p-4 border-b border-slate-800">
                 <h1 className="text-xl font-headline font-bold text-white">{selectedSymbol}/USDT</h1>
                 <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                    <Link href="/editor">
+                    <Link href={`/editor?symbol=${selectedSymbol}USDT`}>
                         Bu Varlıkla Bot Oluştur <ArrowRight className="ml-2 h-4 w-4"/>
                     </Link>
                 </Button>

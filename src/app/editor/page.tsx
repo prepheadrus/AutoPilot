@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -16,7 +16,7 @@ import {
   NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ComposedChart,
   Line,
@@ -362,6 +362,21 @@ export default function StrategyEditorPage() {
 
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const symbol = searchParams.get('symbol');
+    if (symbol) {
+      setNodes((nds) => 
+        nds.map((node) => {
+          if (node.type === 'dataSource') {
+            return { ...node, data: { ...node.data, symbol } };
+          }
+          return node;
+        })
+      );
+    }
+  }, [searchParams, setNodes]);
 
   const onConnect = useCallback(
     (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
