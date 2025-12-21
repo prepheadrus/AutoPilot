@@ -92,7 +92,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <SheetContent side="left">
             <nav className="grid gap-6 text-lg font-medium">
                 <Link
-                href="#"
+                href="/"
                 className="flex items-center gap-2 text-lg font-semibold text-primary"
                 >
                 <Bot className="h-6 w-6" />
@@ -123,7 +123,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
         </div>
       </header>
-       <main className={cn("flex-1", isEditorPage ? "overflow-hidden flex" : "p-6 flex flex-col")}>
+       <main className={cn("flex flex-col flex-1", isEditorPage ? "overflow-hidden p-0" : "p-6")}>
           {children}
       </main>
     </div>
