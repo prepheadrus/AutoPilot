@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bot, Percent, DollarSign } from "lucide-react";
 import {
@@ -51,6 +52,7 @@ const COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--chart-3)
 export default function DashboardPage() {
     const [bots, setBots] = useState<BotType[]>([]);
     const [isClient, setIsClient] = useState(false);
+    const router = useRouter();
 
     useEffect(() => {
         setIsClient(true);
@@ -96,6 +98,12 @@ export default function DashboardPage() {
         acc[name] = { label: name };
         return acc;
       }, {} as any)
+    };
+
+    const handlePieClick = (data: any) => {
+        if (data && data.name) {
+            router.push(`/market?symbol=${data.name}`);
+        }
     };
 
 
@@ -205,20 +213,19 @@ export default function DashboardPage() {
                             outerRadius={80}
                             fill="#8884d8"
                             labelLine={false}
-                            label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                            label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
                                 const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
                                 const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
                                 const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
-                                const name = pieChartData[pieChartData.findIndex(d => d.value === (percent * 100))]?.name;
                                 return (
                                 <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12}>
-                                    {`${pieChartData.find(d => d.name === name)?.name} (${(percent * 100).toFixed(0)}%)`}
+                                    {`${name} (${(percent * 100).toFixed(0)}%)`}
                                 </text>
                                 );
                             }}
                         >
                             {pieChartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} onClick={() => handlePieClick(entry)} className="cursor-pointer" />
                             ))}
                         </Pie>
                     </PieChart>

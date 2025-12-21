@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef, memo, useId, useCallback } from 'react';
 import Link from 'next/link';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,16 @@ export default function MarketTerminalPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [marketData, setMarketData] = useState<MarketCoin[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    const symbolFromUrl = searchParams.get('symbol');
+    if (symbolFromUrl) {
+      setSelectedSymbol(symbolFromUrl);
+    }
+  }, [searchParams]);
 
   const fetchMarketData = useCallback(async () => {
       try {
@@ -116,6 +127,12 @@ export default function MarketTerminalPage() {
     coin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     coin.symbol.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleSelectSymbol = (symbol: string) => {
+    setSelectedSymbol(symbol);
+    // Update URL without reloading the page
+    router.push(`/market?symbol=${symbol}`, { scroll: false });
+  }
 
   return (
     <div className="flex-1 flex flex-row overflow-hidden rounded-lg bg-slate-950 border border-slate-800">
@@ -147,7 +164,8 @@ export default function MarketTerminalPage() {
                                 <Skeleton className="h-5 w-20 justify-self-end" />
                                 <Skeleton className="h-5 w-10 justify-self-end" />
                             </div>
-                        ))}
+                        </div>
+                    ))}
                     </div>
                 ) : (
                     <ul>
@@ -158,7 +176,7 @@ export default function MarketTerminalPage() {
                                         "w-full p-2 grid grid-cols-3 gap-2 items-center text-sm text-left hover:bg-slate-800/50 rounded-md transition-colors",
                                         selectedSymbol === coin.symbol && "bg-primary/10 text-primary"
                                     )}
-                                    onClick={() => setSelectedSymbol(coin.symbol)}
+                                    onClick={() => handleSelectSymbol(coin.symbol)}
                                 >
                                     <span className="font-bold">{coin.symbol}</span>
                                     <span className="font-mono text-right">${coin.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
