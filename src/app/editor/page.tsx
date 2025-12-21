@@ -444,7 +444,7 @@ export default function StrategyEditorPage() {
                                         const color = payload.ohlc[3] > payload.ohlc[0] ? '#22c55e' : '#ef4444';
                                         return <rect x={x + width/2 - 0.5} y={y} width={1} height={height} fill={color} />;
                                     }} isAnimationActive={false} />
-                                     <Bar yAxisId="price" dataKey={(v) => Math.min(v.ohlc[0], v_ohlc[3]) - v.ohlc[2]} stackId="a" fill="transparent" shape={(props: any) => {
+                                     <Bar yAxisId="price" dataKey={(v) => Math.min(v.ohlc[0], v.ohlc[3]) - v.ohlc[2]} stackId="a" fill="transparent" shape={(props: any) => {
                                         const {x, y, width, height, payload} = props;
                                         const color = payload.ohlc[3] > payload.ohlc[0] ? '#22c55e' : '#ef4444';
                                         return <rect x={x + width/2 - 0.5} y={y} width={1} height={height} fill={color} />;
