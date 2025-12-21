@@ -1,15 +1,18 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Handle, Position, NodeProps, useReactFlow } from '@xyflow/react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Rss } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Rss, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
-export function IndicatorNode({ data, id }: NodeProps<{ indicatorType?: string, period?: number }>) {
+export function IndicatorNode({ data, id }: NodeProps<{ indicatorType?: string, period?: number, onOptimize: (nodeId: string) => void }>) {
   const { setNodes } = useReactFlow();
+  const { toast } = useToast();
 
   // Helper to update node data
   const updateNodeData = (key: string, value: any) => {
@@ -23,6 +26,16 @@ export function IndicatorNode({ data, id }: NodeProps<{ indicatorType?: string, 
     );
   };
   
+  const handleOptimizeClick = () => {
+    toast({
+        title: "Optimizasyon Başlatıldı...",
+        description: "En iyi parametreler aranıyor. Lütfen bekleyin."
+    })
+    if (data.onOptimize) {
+      data.onOptimize(id);
+    }
+  }
+
   return (
     <div className="bg-slate-800 border-2 border-slate-400 border-l-4 border-l-blue-500 rounded-lg shadow-xl w-64 text-white">
       <div className="p-3 border-b border-slate-700">
@@ -54,11 +67,16 @@ export function IndicatorNode({ data, id }: NodeProps<{ indicatorType?: string, 
             <Input 
               id={`${id}-period`} 
               type="number" 
+              key={data.period} // Add key to force re-render on data change
               defaultValue={data.period || 14} 
               onChange={(e) => updateNodeData('period', parseInt(e.target.value, 10))}
               className="bg-slate-700 border-slate-600 text-white" 
             />
         </div>
+        <Button onClick={handleOptimizeClick} variant="outline" size="sm" className="w-full gap-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300">
+            <Zap className="h-4 w-4" />
+            Periyodu Optimize Et
+        </Button>
       </div>
       <Handle type="target" position={Position.Left} className={cn("w-3 h-3 !bg-blue-400")} />
       <Handle type="source" position={Position.Right} className="!bg-blue-400 w-3 h-3" />

@@ -39,7 +39,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from '@/components/ui/slider';
-import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database } from 'lucide-react';
+import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database, Zap } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
@@ -372,6 +372,54 @@ export default function StrategyEditorPage() {
     (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
     [setEdges],
   );
+  
+  const handleOptimizePeriod = (nodeId: string) => {
+    const nodeToOptimize = nodes.find(n => n.id === nodeId);
+    if (!nodeToOptimize) return;
+
+    let bestPeriod = nodeToOptimize.data.period;
+    let bestProfitFactor = -Infinity;
+
+    // Brute-force check for periods from 7 to 30
+    for (let period = 7; period <= 30; period++) {
+      const tempNodes = nodes.map(n => {
+        if (n.id === nodeId) {
+          return { ...n, data: { ...n.data, period: period } };
+        }
+        return n;
+      });
+
+      const result = runBacktestEngine(tempNodes, edges);
+      if (!('error' in result) && result.stats.profitFactor > bestProfitFactor) {
+        bestProfitFactor = result.stats.profitFactor;
+        bestPeriod = period;
+      }
+    }
+    
+    // Update the node with the best found period
+    setNodes(nds =>
+      nds.map(n => {
+        if (n.id === nodeId) {
+          return { ...n, data: { ...n.data, period: bestPeriod } };
+        }
+        return n;
+      })
+    );
+    
+    toast({
+        title: "Optimizasyon Tamamlandı!",
+        description: `En iyi periyot ${bestPeriod} olarak bulundu (Kâr Faktörü: ${bestProfitFactor.toFixed(2)}).`
+    })
+  };
+
+
+  const nodeTypesWithOptimization = useMemo(() => ({
+    indicator: (props: NodeProps) => <IndicatorNode {...props} data={{ ...props.data, onOptimize: handleOptimizePeriod }} />,
+    logic: LogicNode,
+    action: ActionNode,
+    dataSource: DataSourceNode,
+  }), [nodes]); // Re-create if nodes change to pass the latest nodes array to the optimizer
+
 
   const addNode = useCallback((type: string) => {
     const newNodeId = `${type}-${Date.now()}`;
@@ -495,21 +543,32 @@ export default function StrategyEditorPage() {
   const handleBacktest = () => {
     setIsBacktesting(true);
     setBacktestResult(null);
-    setTimeout(() => {
-        const result = runBacktestEngine(nodes, edges);
-        if ('error' in result) {
-            toast({
-                title: 'Backtest Hatası',
-                description: result.error,
-                variant: 'destructive',
-            });
+    // Use try-catch for localStorage operations
+    try {
+        setTimeout(() => {
+            const result = runBacktestEngine(nodes, edges);
+            if ('error' in result) {
+                toast({
+                    title: 'Backtest Hatası',
+                    description: result.error,
+                    variant: 'destructive',
+                });
+                setIsBacktesting(false);
+                return;
+            }
+            setBacktestResult(result);
             setIsBacktesting(false);
-            return;
-        }
-        setBacktestResult(result);
+            setIsBacktestModalOpen(true);
+        }, 1500);
+    } catch (error) {
+        console.error("Backtest sırasında hata:", error);
+        toast({
+            title: 'Beklenmedik Hata',
+            description: 'Backtest motoru çalıştırılamadı.',
+            variant: 'destructive',
+        });
         setIsBacktesting(false);
-        setIsBacktestModalOpen(true);
-    }, 1500);
+    }
   }
 
   const handleConfigChange = (field: keyof BotConfig, value: any) => {
@@ -535,6 +594,11 @@ export default function StrategyEditorPage() {
     const firstDataPoint = backtestResult.ohlcData[0];
     return Object.keys(firstDataPoint).filter(key => key.includes('('));
   }, [backtestResult]);
+  
+  // A flag to check if there is an oscillator indicator like RSI
+  const hasOscillator = useMemo(() => {
+    return indicatorKeys.some(key => key.startsWith('RSI'));
+  }, [indicatorKeys]);
 
   return (
     <div className="flex flex-1 flex-row overflow-hidden">
@@ -561,7 +625,7 @@ export default function StrategyEditorPage() {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
-                nodeTypes={nodeTypes}
+                nodeTypes={nodeTypesWithOptimization}
                 fitView
                 className="bg-background"
             >
@@ -636,7 +700,7 @@ export default function StrategyEditorPage() {
                         </div>
 
                         <div className="w-full h-full">
-                           <ResponsiveContainer width="100%" height="70%">
+                           <ResponsiveContainer width="100%" height={hasOscillator ? "70%" : "100%"}>
                                <ComposedChart data={chartAndTradeData} syncId="backtestChart">
                                     <defs>
                                         <linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1">
@@ -668,30 +732,28 @@ export default function StrategyEditorPage() {
                                     <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Kümülatif Kâr" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
                                     
                                     <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" dot={false} strokeWidth={2} />
+                                     {indicatorKeys.filter(k => !k.startsWith('RSI')).map((key, index) => (
+                                        <Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={["#facc15", "#38bdf8"][(index) % 2]} dot={false} strokeWidth={1.5} />
+                                    ))}
                                     
                                     <Scatter yAxisId="price" name="İşlemler" dataKey="tradeMarker.price" fill="transparent" shape={<TradeMarker />} />
                                 </ComposedChart>
                             </ResponsiveContainer>
-                            <ResponsiveContainer width="100%" height="30%">
-                                <ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}>
-                                    <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                    <XAxis dataKey="time" hide={true}/>
-                                    <YAxis yAxisId="indicator" orientation="right" domain={['auto', 'auto']} tickCount={4} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    {indicatorKeys.map(key => {
-                                        if (key.startsWith('RSI')) {
-                                            return [
-                                                <ReferenceLine key="ref-70" yAxisId="indicator" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />,
-                                                <ReferenceLine key="ref-30" yAxisId="indicator" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
-                                            ];
-                                        }
-                                        return null;
-                                    })}
-                                    {indicatorKeys.map((key, index) => (
-                                        <Line key={key} yAxisId="indicator" type="monotone" dataKey={key} stroke={["#eab308", "#3b82f6"][index % 2]} fillOpacity={0.2} name={key} dot={false}/>
-                                    ))}
-                                </ComposedChart>
-                            </ResponsiveContainer>
+                            {hasOscillator && (
+                                <ResponsiveContainer width="100%" height="30%">
+                                    <ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}>
+                                        <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
+                                        <XAxis dataKey="time" hide={true}/>
+                                        <YAxis yAxisId="indicator" orientation="right" domain={[0, 100]} tickCount={4} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <ReferenceLine yAxisId="indicator" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
+                                        <ReferenceLine yAxisId="indicator" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
+                                        {indicatorKeys.filter(k => k.startsWith('RSI')).map((key, index) => (
+                                            <Line key={key} yAxisId="indicator" type="monotone" dataKey={key} stroke={["#eab308", "#3b82f6"][index % 2]} fillOpacity={0.2} name={key} dot={false}/>
+                                        ))}
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            )}
                         </div>
                     </div>
                     )}
