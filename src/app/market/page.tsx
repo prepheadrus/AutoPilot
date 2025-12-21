@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, memo, useId, useCallback } from 'react';
@@ -32,14 +33,14 @@ const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
     const container = containerRef.current;
     if (!container) return;
 
-    const script = document.createElement("script");
-    script.src = "https://s3.tradingview.com/tv.js";
-    script.type = "text/javascript";
-    script.async = true;
-    script.id = 'tradingview-widget-script';
-
+    // Ensure the script is loaded, then create the widget.
     const createWidget = () => {
         if (document.getElementById(container_id) && typeof window.TradingView !== 'undefined') {
+             // Clear previous widget before creating a new one
+            const widgetContainer = document.getElementById(container_id);
+            if(widgetContainer) {
+                widgetContainer.innerHTML = '';
+            }
             new window.TradingView.widget({
               autosize: true,
               symbol: `BINANCE:${symbol.toUpperCase()}USDT`,
@@ -57,13 +58,13 @@ const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
         }
     }
     
-    // Clear previous widget before creating a new one
-    const widgetContainer = document.getElementById(container_id);
-    if(widgetContainer) {
-        widgetContainer.innerHTML = '';
-    }
-
-    if (!document.getElementById(script.id)) {
+    const scriptId = 'tradingview-widget-script';
+    if (!document.getElementById(scriptId)) {
+        const script = document.createElement("script");
+        script.id = scriptId;
+        script.src = "https://s3.tradingview.com/tv.js";
+        script.type = "text/javascript";
+        script.async = true;
         script.onload = createWidget;
         document.body.appendChild(script);
     } else {
