@@ -1,5 +1,14 @@
 export type BotStatus = "Çalışıyor" | "Durduruldu" | "Hata";
 
+export type BotConfig = {
+    stopLoss: number;
+    takeProfit: number;
+    trailingStop: boolean;
+    amountType: 'fixed' | 'percentage';
+    amount: number;
+    leverage: number;
+};
+
 export type Bot = {
     id: number;
     name: string;
@@ -7,6 +16,7 @@ export type Bot = {
     status: BotStatus;
     pnl: number;
     duration: string;
+    config?: BotConfig;
 };
 
 export type Log = {

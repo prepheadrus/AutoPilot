@@ -26,12 +26,17 @@ import {
 } from 'recharts';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, X as XIcon } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from '@/components/ui/slider';
+import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
-import type { Bot } from '@/lib/types';
+import type { Bot, BotConfig } from '@/lib/types';
 
 
 const initialNodes: Node[] = [
@@ -71,6 +76,15 @@ const backtestChartData = Array.from({ length: 30 }, (_, i) => ({
   profit: 10000 + (i * 40) + (Math.sin(i / 3) * 200) + (Math.random() * 150 * (i/5)),
 }));
 
+const initialStrategyConfig: BotConfig = {
+    stopLoss: 2.0,
+    takeProfit: 5.0,
+    trailingStop: false,
+    amountType: 'fixed',
+    amount: 100,
+    leverage: 1
+};
+
 
 export default function StrategyEditorPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -78,6 +92,9 @@ export default function StrategyEditorPage() {
   const [isCompiling, setIsCompiling] = useState(false);
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [isBacktestModalOpen, setIsBacktestModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [strategyConfig, setStrategyConfig] = useState<BotConfig>(initialStrategyConfig);
+
   const { toast } = useToast();
   const router = useRouter();
 
@@ -168,6 +185,7 @@ export default function StrategyEditorPage() {
           status: 'Durduruldu',
           pnl: 0,
           duration: "0s",
+          config: strategyConfig
         };
 
         const storedBotsJSON = localStorage.getItem('myBots');
@@ -200,6 +218,10 @@ export default function StrategyEditorPage() {
         setIsBacktesting(false);
         setIsBacktestModalOpen(true);
     }, 1500);
+  }
+
+  const handleConfigChange = (field: keyof BotConfig, value: any) => {
+    setStrategyConfig(prev => ({...prev, [field]: value}));
   }
 
   return (
@@ -246,6 +268,10 @@ export default function StrategyEditorPage() {
                     ) : (
                        <><Play className="mr-2 h-4 w-4" /> Backtest Başlat</>
                     )}
+                </Button>
+                <Button variant="secondary" className="bg-slate-600 hover:bg-slate-500" onClick={() => setIsSettingsModalOpen(true)} disabled={isCompiling || isBacktesting}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Strateji Ayarları
                 </Button>
                 <Button variant="secondary" onClick={handleSaveStrategy} disabled={isCompiling || isBacktesting}>
                     <Save className="mr-2 h-4 w-4" />
@@ -308,6 +334,84 @@ export default function StrategyEditorPage() {
                     </div>
                      <div className="flex justify-end border-t border-slate-800 p-4">
                         <Button onClick={() => setIsBacktestModalOpen(false)} variant="secondary">Kapat</Button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {isSettingsModalOpen && (
+             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
+                    <div className="flex items-center justify-between border-b border-slate-800 p-4">
+                        <h2 className="text-xl font-headline font-semibold">Strateji Konfigürasyonu</h2>
+                        <Button variant="ghost" size="icon" onClick={() => setIsSettingsModalOpen(false)}>
+                            <XIcon className="h-5 w-5"/>
+                        </Button>
+                    </div>
+                    <div className="p-6 space-y-6">
+                        {/* Risk Yönetimi */}
+                        <div>
+                            <h3 className="text-lg font-semibold font-headline mb-4">Risk Yönetimi</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="stop-loss">Stop Loss (%)</Label>
+                                    <Input id="stop-loss" type="number" value={strategyConfig.stopLoss} onChange={e => handleConfigChange('stopLoss', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="take-profit">Take Profit (%)</Label>
+                                    <Input id="take-profit" type="number" value={strategyConfig.takeProfit} onChange={e => handleConfigChange('takeProfit', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/>
+                                </div>
+                            </div>
+                            <div className="flex items-center space-x-2 mt-4">
+                                <Checkbox id="trailing-stop" checked={strategyConfig.trailingStop} onCheckedChange={checked => handleConfigChange('trailingStop', checked)} />
+                                <Label htmlFor="trailing-stop">Trailing Stop Kullan</Label>
+                            </div>
+                        </div>
+                        
+                        {/* Pozisyon Boyutlandırma */}
+                        <div>
+                            <h3 className="text-lg font-semibold font-headline mb-4">Pozisyon Boyutlandırma</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                               <div className="space-y-2">
+                                    <Label htmlFor="amount-type">İşlem Tutarı Tipi</Label>
+                                    <Select value={strategyConfig.amountType} onValueChange={value => handleConfigChange('amountType', value)}>
+                                        <SelectTrigger id="amount-type" className="bg-slate-800 border-slate-700">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-slate-800 border-slate-600 text-white">
+                                            <SelectItem value="fixed">Sabit ($)</SelectItem>
+                                            <SelectItem value="percentage">Yüzde (%)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="amount">Miktar</Label>
+                                    <Input id="amount" type="number" value={strategyConfig.amount} onChange={e => handleConfigChange('amount', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/>
+                                </div>
+                            </div>
+                            <div className="space-y-3 mt-4">
+                                <div className="flex justify-between">
+                                   <Label htmlFor="leverage">Kaldıraç (Leverage)</Label>
+                                   <span className="text-sm font-mono px-2 py-1 rounded bg-slate-700">{strategyConfig.leverage}x</span>
+                                </div>
+                                <Slider 
+                                    id="leverage" 
+                                    min={1} 
+                                    max={20} 
+                                    step={1} 
+                                    value={[strategyConfig.leverage]} 
+                                    onValueChange={([value]) => handleConfigChange('leverage', value)}
+                                />
+                            </div>
+                        </div>
+
+                    </div>
+                     <div className="flex justify-end gap-2 border-t border-slate-800 p-4">
+                        <Button onClick={() => setIsSettingsModalOpen(false)} variant="secondary">İptal</Button>
+                        <Button onClick={() => {
+                            toast({title: "Ayarlar Kaydedildi!"});
+                            setIsSettingsModalOpen(false)
+                        }}>Ayarları Kaydet</Button>
                     </div>
                 </div>
             </div>
