@@ -16,12 +16,11 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { Button } from '@/components/ui/button';
-import { Loader2, Terminal, Rss, GitBranch, CircleDollarSign } from 'lucide-react';
+import { Loader2, Rss, GitBranch, CircleDollarSign } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
-import { cn } from '@/lib/utils';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 const nodeTypes = {
   indicator: IndicatorNode,
@@ -52,8 +51,9 @@ const initialNodes: Node[] = [
 
 const initialEdges: Edge[] = [
   { id: 'e1-2', source: '1', target: '2', markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: 'e2-3', source: '2', target: '3', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id:e2-3', source: '2', target: '3', markerEnd: { type: MarkerType.ArrowClosed } },
 ];
+
 
 const Sidebar = ({ onAddNode }: { onAddNode: (type: string) => void }) => {
     return (
@@ -72,11 +72,12 @@ const Sidebar = ({ onAddNode }: { onAddNode: (type: string) => void }) => {
     );
 };
 
+
 export default function StrategyEditorPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isCompiling, setIsCompiling] = useState(false);
-  const [logs, setLogs] = useState<string[]>(['> [SİSTEM] Editör başlatıldı. Stratejinizi oluşturun veya test edin.']);
+  const { toast } = useToast();
 
   const onConnect = useCallback(
     (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
@@ -84,11 +85,12 @@ export default function StrategyEditorPage() {
   );
 
   const addNode = useCallback((type: string) => {
+    const newNodeId = `${type}-${Date.now()}`;
     let nodeLabel = "Yeni Düğüm";
     let nodeData = {};
     const position = {
-        x: 250 + Math.random() * 100,
-        y: 100 + Math.random() * 100,
+        x: 250 + Math.random() * 200 - 100,
+        y: 100 + Math.random() * 200 - 100,
     };
 
     if (type === 'indicator') {
@@ -103,7 +105,7 @@ export default function StrategyEditorPage() {
     }
 
     const newNode: Node = {
-      id: `${type}-${Date.now()}`,
+      id: newNodeId,
       type,
       position,
       data: nodeData,
@@ -115,7 +117,8 @@ export default function StrategyEditorPage() {
 
   const handleRunStrategy = async () => {
     setIsCompiling(true);
-    setLogs(prev => [...prev, '> [İSTEK] Strateji testi başlatılıyor...']);
+    toast({ title: 'Strateji testi başlatılıyor...', description: 'Lütfen bekleyin.' });
+
     try {
       const response = await fetch('/api/run-bot', {
         method: 'POST',
@@ -131,11 +134,19 @@ export default function StrategyEditorPage() {
         throw new Error(data.message || 'Bilinmeyen bir test hatası oluştu.');
       }
       
-      setLogs(prev => [...prev, `> [BAŞARILI] ${data.message}`]);
+      toast({
+        variant: "default",
+        title: "Test Başarılı",
+        description: data.message,
+      });
 
     } catch (error) {
        const errorMessage = (error as Error).message;
-       setLogs(prev => [...prev, `> [HATA] ${errorMessage}`]);
+       toast({
+        variant: "destructive",
+        title: "Test Hatası",
+        description: errorMessage,
+      });
     } finally {
       setIsCompiling(false);
     }
@@ -144,56 +155,32 @@ export default function StrategyEditorPage() {
   return (
     <div className="flex flex-row w-full h-full">
         <Sidebar onAddNode={addNode} />
-        <main className="flex-1 flex flex-col">
-            <div className="flex-1 relative">
-                <ReactFlow
-                    nodes={nodes}
-                    edges={edges}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    onConnect={onConnect}
-                    nodeTypes={nodeTypes}
-                    fitView
-                    className="bg-background"
-                >
-                    <Background color="#334155" gap={20} size={1} />
-                    <Controls />
-                </ReactFlow>
+        <main className="flex-1 relative">
+            <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                nodeTypes={nodeTypes}
+                fitView
+                className="bg-background"
+            >
+                <Background color="#334155" gap={20} size={1} />
+                <Controls />
+            </ReactFlow>
 
-                <div className="absolute top-4 right-4 z-10 flex gap-2">
-                    <Button onClick={handleRunStrategy} disabled={isCompiling}>
-                        {isCompiling ? (
-                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Çalıştırılıyor...</>
-                        ) : (
-                            "▶ Stratejiyi Test Et"
-                        )}
-                    </Button>
-                    <Button variant="secondary" onClick={() => toast({ title: "Kaydedildi", description: "Stratejiniz başarıyla kaydedildi."})}>
-                        Kaydet
-                    </Button>
-                </div>
-            </div>
-            
-            <div className="h-48 z-10 bg-black/80 backdrop-blur-sm border-t border-slate-700 text-white font-mono">
-                <div className="p-3 border-b border-slate-700 flex items-center gap-2">
-                    <Terminal className="h-5 w-5"/>
-                    <h3 className="font-bold text-sm">Sistem Kayıtları</h3>
-                </div>
-                <div className="p-4 text-sm overflow-y-auto h-[calc(100%-49px)]">
-                {logs.map((log, index) => (
-                    <p key={index} className={cn(
-                    'whitespace-pre-wrap', 
-                    log.includes('[HATA]') && 'text-red-400',
-                    log.includes('[BAŞARILI]') && 'text-green-400',
-                    log.includes('[İSTEK]') && 'text-yellow-400',
-                    log.includes('[SİSTEM]') && 'text-slate-400',
-                    log.includes('[SİMÜLASYON]') && 'text-cyan-400',
-                    log.includes('[CANLI]') && 'text-green-400',
-                    )}>
-                    {log}
-                    </p>
-                ))}
-                </div>
+            <div className="absolute top-4 right-4 z-10 flex gap-2">
+                <Button onClick={handleRunStrategy} disabled={isCompiling}>
+                    {isCompiling ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Çalıştırılıyor...</>
+                    ) : (
+                        "▶ Stratejiyi Test Et"
+                    )}
+                </Button>
+                <Button variant="secondary" onClick={() => toast({ title: "Kaydedildi", description: "Stratejiniz başarıyla kaydedildi."})}>
+                    Kaydet
+                </Button>
             </div>
         </main>
     </div>
