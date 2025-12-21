@@ -75,11 +75,12 @@ const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
         }
 
         return () => {
-             if (container) {
-                const iframe = container.querySelector('iframe');
-                if (iframe) {
+             const widgetContainer = document.getElementById(container_id);
+             if (widgetContainer) {
+                const iframe = widgetContainer.querySelector('iframe');
+                if (iframe && iframe.parentNode) {
                    try {
-                     container.removeChild(iframe);
+                     iframe.parentNode.removeChild(iframe);
                    } catch (error) {
                        console.error("Error cleaning up TradingView widget:", error);
                    }
@@ -178,10 +179,15 @@ export default function MarketTerminalPage() {
       return (
         <div className="p-2 space-y-2">
             {Array.from({ length: 15 }).map((_, i) => (
-                <div key={i} className="grid grid-cols-[auto,1fr,1fr] gap-4 items-center">
+                <div key={i} className="grid grid-cols-[auto,1fr,1fr] gap-4 items-center p-1">
                     <Skeleton className="h-5 w-5 rounded-full" />
-                    <Skeleton className="h-5 w-16" />
-                    <Skeleton className="h-5 w-24 justify-self-end" />
+                    <div className='w-full'>
+                        <Skeleton className="h-5 w-16" />
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                        <Skeleton className="h-5 w-24 justify-self-end" />
+                        <Skeleton className="h-3 w-10 justify-self-end" />
+                    </div>
                 </div>
             ))}
         </div>
