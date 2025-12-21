@@ -155,7 +155,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
                 <p className="font-bold">{`Tarih: ${label}`}</p>
                 {priceData && <p>Fiyat: <span className="font-mono">${priceData.price.toFixed(2)}</span></p>}
                 {pnlData && <p>Kâr: <span className="font-mono">${pnlData.value?.toFixed(2)}</span></p>}
-                {priceData.rsi && <p>RSI: <span className="font-mono">{priceData.rsi.toFixed(2)}</span></p>}
+                {priceData && priceData.rsi && <p>RSI: <span className="font-mono">{priceData.rsi.toFixed(2)}</span></p>}
                 {trade && (
                      <p className={`font-bold mt-2 ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
                         {trade.type.toUpperCase()} @ ${trade.price?.toFixed(2)}
@@ -531,5 +531,7 @@ export default function StrategyEditorPage() {
     </div>
   );
 }
+
+    
 
     
