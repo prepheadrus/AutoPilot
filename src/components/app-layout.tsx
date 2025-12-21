@@ -32,10 +32,57 @@ const navItems = [
   { href: "/settings", label: "Ayarlar", icon: Settings },
 ];
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+function NavigationLinks() {
   const pathname = usePathname();
-  const userAvatar = PlaceHolderImages.find(p => p.id === 'user-avatar') as ImagePlaceholder;
+  return (
+    <>
+      {navItems.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          className={cn(
+            "transition-colors hover:text-foreground flex items-center gap-2",
+            pathname === item.href ? "text-foreground" : "text-muted-foreground"
+          )}
+        >
+          <item.icon className="h-4 w-4"/>
+          {item.label}
+        </Link>
+      ))}
+    </>
+  );
+}
 
+function MobileNavigationLinks() {
+    const pathname = usePathname();
+    return (
+        <nav className="grid gap-6 text-lg font-medium">
+            <Link
+            href="#"
+            className="flex items-center gap-2 text-lg font-semibold text-primary"
+            >
+            <Bot className="h-6 w-6" />
+            <span className="sr-only">AutoPilot</span>
+            </Link>
+            {navItems.map((item) => (
+            <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                "hover:text-foreground",
+                    pathname === item.href ? "text-foreground" : "text-muted-foreground"
+                )}
+            >
+                {item.label}
+            </Link>
+            ))}
+        </nav>
+    );
+}
+
+export function AppLayout({ children }: { children: React.ReactNode }) {
+  const userAvatar = PlaceHolderImages.find(p => p.id === 'user-avatar') as ImagePlaceholder;
+  const pathname = usePathname();
   const isEditorPage = pathname === '/editor';
 
   return (
@@ -49,19 +96,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <Bot className="h-6 w-6" />
             <span className="font-headline">AutoPilot</span>
           </Link>
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "transition-colors hover:text-foreground flex items-center gap-2",
-                pathname === item.href ? "text-foreground" : "text-muted-foreground"
-              )}
-            >
-              <item.icon className="h-4 w-4"/>
-              {item.label}
-            </Link>
-          ))}
+          <NavigationLinks />
         </nav>
         
         {/* Mobile Menu */}
@@ -77,27 +112,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </Button>
           </SheetTrigger>
           <SheetContent side="left">
-            <nav className="grid gap-6 text-lg font-medium">
-              <Link
-                href="#"
-                className="flex items-center gap-2 text-lg font-semibold text-primary"
-              >
-                <Bot className="h-6 w-6" />
-                <span className="sr-only">AutoPilot</span>
-              </Link>
-              {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "hover:text-foreground",
-                     pathname === item.href ? "text-foreground" : "text-muted-foreground"
-                  )}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            <MobileNavigationLinks />
           </SheetContent>
         </Sheet>
         
@@ -121,7 +136,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
         </div>
       </header>
-       <main className={cn("flex flex-col flex-1", isEditorPage ? "p-0 overflow-hidden" : "p-0")}>
+       <main className={cn("flex flex-1 flex-col", isEditorPage ? "overflow-hidden" : "p-6")}>
           {children}
       </main>
     </div>
