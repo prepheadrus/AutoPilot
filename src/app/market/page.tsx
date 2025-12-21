@@ -25,43 +25,56 @@ const marketListData = [
 
 // Memoized TradingView Widget to prevent re-renders on parent state changes
 const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
-  const container = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (container.current && typeof window !== 'undefined') {
-      // Clear previous widget
-      container.current.innerHTML = '';
-      
-      const script = document.createElement("script");
-      script.src = "https://s3.tradingview.com/tv.js";
-      script.type = "text/javascript";
-      script.async = true;
-      script.onload = () => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Clear previous widget
+    container.innerHTML = '';
+    
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/tv.js";
+    script.type = "text/javascript";
+    script.async = true;
+    script.onload = () => {
+      if (typeof (window as any).TradingView !== 'undefined') {
+        new (window as any).TradingView.widget({
+          autosize: true,
+          symbol: `BINANCE:${symbol.toUpperCase()}USDT`,
+          interval: "D",
+          timezone: "Etc/UTC",
+          theme: "dark",
+          style: "1",
+          locale: "tr",
+          toolbar_bg: "#f1f3f6",
+          enable_publishing: false,
+          withdateranges: true,
+          hide_side_toolbar: false,
+          allow_symbol_change: true,
+          container_id: container.id
+        });
+      }
+    };
+    
+    // Check if the script already exists to avoid duplicates
+    const scriptId = 'tradingview-widget-script';
+    if (!document.getElementById(scriptId)) {
+        script.id = scriptId;
+        document.body.appendChild(script);
+    } else {
+        // If script is already there, just run onload logic
         if (typeof (window as any).TradingView !== 'undefined') {
-          new (window as any).TradingView.widget({
-            autosize: true,
-            symbol: `BINANCE:${symbol.toUpperCase()}USDT`,
-            interval: "D",
-            timezone: "Etc/UTC",
-            theme: "dark",
-            style: "1",
-            locale: "tr",
-            toolbar_bg: "#f1f3f6",
-            enable_publishing: false,
-            withdateranges: true,
-            hide_side_toolbar: false,
-            allow_symbol_change: true,
-            container_id: `tradingview_${symbol}`
-          });
+            script.onload();
         }
-      };
-      container.current.appendChild(script);
     }
+
   }, [symbol]);
 
   return (
-    <div className="tradingview-widget-container h-full" ref={container}>
-      <div id={`tradingview_${symbol}`} className="h-full" />
+    <div className="tradingview-widget-container h-full" ref={containerRef}>
+      <div id={`tradingview_widget_${Date.now()}`} className="h-full" />
     </div>
   );
 });
