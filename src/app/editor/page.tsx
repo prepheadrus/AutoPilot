@@ -518,7 +518,9 @@ export default function StrategyEditorPage() {
           status: 'Durduruldu',
           pnl: 0,
           duration: "0s",
-          config: strategyConfig
+          config: strategyConfig,
+          nodes: nodes,
+          edges: edges,
         };
 
         const storedBotsJSON = localStorage.getItem('myBots');

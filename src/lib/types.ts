@@ -1,3 +1,5 @@
+import type { Node, Edge } from '@xyflow/react';
+
 export type BotStatus = "Çalışıyor" | "Durduruldu" | "Hata";
 
 export type BotConfig = {
@@ -24,6 +26,8 @@ export type Bot = {
     pnl: number;
     duration: string;
     config: BotConfig;
+    nodes?: Node[];
+    edges?: Edge[];
 };
 
 export type Log = {
