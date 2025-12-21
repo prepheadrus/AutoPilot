@@ -87,7 +87,7 @@ body {
   }
 }
 
-/* React Flow Controls Fix for Dark Mode */
+/* React Flow Fixes for Dark Mode */
 .dark .xyflow__controls-button {
     background-color: hsl(var(--secondary));
     border-bottom: 1px solid hsl(var(--border));
@@ -99,4 +99,18 @@ body {
 
 .dark .xyflow__controls-button svg {
     fill: hsl(var(--foreground));
+}
+
+.dark .xyflow__minimap {
+    background-color: hsl(var(--secondary));
+    border: 1px solid hsl(var(--border));
+}
+
+.dark .xyflow__minimap-mask {
+    fill: hsl(var(--background) / 0.6);
+}
+
+.dark .xyflow__minimap-node {
+  fill: hsl(var(--muted));
+  stroke: none;
 }
