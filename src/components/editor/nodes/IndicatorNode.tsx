@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Rss } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function IndicatorNode({ data, id }: NodeProps<{ indicatorType?: string, period?: number }>) {
   const { setNodes } = useReactFlow();
@@ -59,9 +60,8 @@ export function IndicatorNode({ data, id }: NodeProps<{ indicatorType?: string, 
             />
         </div>
       </div>
+      <Handle type="target" position={Position.Left} className={cn("w-3 h-3 !bg-blue-400")} />
       <Handle type="source" position={Position.Right} className="!bg-blue-400 w-3 h-3" />
     </div>
   );
 }
-
-    

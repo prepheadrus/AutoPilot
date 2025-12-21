@@ -131,33 +131,54 @@ const generateMockOHLCData = (numCandles = 200, symbol = 'BTC/USDT') => {
 
 
 // The core backtesting engine
-const runBacktestEngine = (nodes: Node[], edges: Edge[]): BacktestResult => {
-    // 1. Find data source and generate base data
-    const dataSourceNode = nodes.find(n => n.type === 'dataSource');
-    const symbol = dataSourceNode?.data.symbol || 'BTC/USDT';
-    const ohlcData = generateMockOHLCData(200, symbol);
-    const closePrices = ohlcData.map(d => d.price);
+const runBacktestEngine = (nodes: Node[], edges: Edge[]): BacktestResult | { error: string } => {
+    // 1. Find all data sources and generate their base data
+    const dataSourceNodes = nodes.filter(n => n.type === 'dataSource');
+    if (dataSourceNodes.length === 0) {
+        return { error: 'Lütfen stratejinize en az bir "Veri Kaynağı" düğümü ekleyin.' };
+    }
+
+    const dataBySource: Record<string, any[]> = {};
+    const pricesBySource: Record<string, number[]> = {};
+    dataSourceNodes.forEach(node => {
+        const symbol = node.data.symbol || 'BTC/USDT';
+        const ohlcData = generateMockOHLCData(200, symbol);
+        dataBySource[node.id] = ohlcData;
+        pricesBySource[node.id] = ohlcData.map(d => d.price);
+    });
 
     // 2. Calculate all indicators present on the graph
     const indicatorNodes = nodes.filter(n => n.type === 'indicator');
     const signals: Record<string, (number | undefined)[]> = {};
 
     indicatorNodes.forEach(node => {
+        const sourceEdge = edges.find(e => e.target === node.id);
+        if (!sourceEdge || !dataBySource[sourceEdge.source]) {
+            // This indicator is not connected to a valid data source, skip it.
+            console.warn(`İndikatör "${node.id}" geçerli bir veri kaynağına bağlı değil.`);
+            signals[node.id] = [];
+            return;
+        }
+        
+        const closePrices = pricesBySource[sourceEdge.source];
         const { indicatorType, period } = node.data;
+        let result: number[] = [];
+
         if (indicatorType === 'rsi') {
-            const rsiOutput = RSICalculator.calculate({ values: closePrices, period: period || 14 });
-            signals[node.id] = Array(closePrices.length - rsiOutput.length).fill(undefined).concat(rsiOutput);
+            result = RSICalculator.calculate({ values: closePrices, period: period || 14 });
         } else if (indicatorType === 'sma') {
-            const smaOutput = SMACalculator.calculate({ values: closePrices, period: period || 20 });
-            signals[node.id] = Array(closePrices.length - smaOutput.length).fill(undefined).concat(smaOutput);
-        } else if (indicatorType === 'ema') {
-            const emaOutput = SMACalculator.calculate({ values: closePrices, period: period || 20 }); // EMA is also a type of MA
-            signals[node.id] = Array(closePrices.length - emaOutput.length).fill(undefined).concat(emaOutput);
+            result = SMACalculator.calculate({ values: closePrices, period: period || 20 });
+        } else if (indicatorType === 'ema') { // EMA is a type of MA
+             result = SMACalculator.calculate({ values: closePrices, period: period || 20 });
         }
         // Future: Add MACD etc. here
+        
+        signals[node.id] = Array(closePrices.length - result.length).fill(undefined).concat(result);
     });
 
-    const chartDataWithIndicators = ohlcData.map((d, i) => {
+    // Use the data from the first available data source for the main chart
+    const mainDataSourceId = Object.keys(dataBySource)[0];
+    const chartDataWithIndicators = dataBySource[mainDataSourceId].map((d, i) => {
         const enrichedData: any = { ...d };
         for (const nodeId in signals) {
             enrichedData[nodeId] = signals[nodeId][i];
@@ -293,12 +314,14 @@ const TradeMarker = (props: any) => {
     const { cx, cy, payload } = props;
     if (!payload || !payload.type) return null;
     const isBuy = payload.type === 'buy';
-    const markerY = isBuy ? cy + 10 : cy - 10;
+    // Position markers slightly above/below the line
+    const yOffset = isBuy ? 10 : -10;
+    const markerY = cy + yOffset;
     
     if (isBuy) {
         return <ArrowUp x={cx - 8} y={markerY} width={16} height={16} className="text-green-500 fill-current" />;
     }
-    return <ArrowDown x={cx - 8} y={markerY} width={16} height={16} className="text-red-500 fill-current" />;
+    return <ArrowDown x={cx - 8} y={markerY - 16} width={16} height={16} className="text-red-500 fill-current" />;
 };
 
 // Custom Tooltip for combined chart
@@ -425,10 +448,13 @@ export default function StrategyEditorPage() {
 
     if (botName && botName.trim() !== '') {
       try {
+        const dataSourceNode = nodes.find(n => n.type === 'dataSource');
+        const symbol = dataSourceNode?.data.symbol || 'BTC/USDT';
+
         const newBot: Bot = {
           id: Date.now(),
           name: botName,
-          pair: 'BTC/USDT',
+          pair: symbol,
           status: 'Durduruldu',
           pnl: 0,
           duration: "0s",
@@ -461,8 +487,18 @@ export default function StrategyEditorPage() {
   
   const handleBacktest = () => {
     setIsBacktesting(true);
+    setBacktestResult(null);
     setTimeout(() => {
         const result = runBacktestEngine(nodes, edges);
+        if ('error' in result) {
+            toast({
+                title: 'Backtest Hatası',
+                description: result.error,
+                variant: 'destructive',
+            });
+            setIsBacktesting(false);
+            return;
+        }
         setBacktestResult(result);
         setIsBacktesting(false);
         setIsBacktestModalOpen(true);
@@ -731,5 +767,3 @@ export default function StrategyEditorPage() {
     </div>
   );
 }
-
-    
