@@ -1,20 +1,25 @@
 'use client';
 
-import { useState, MouseEvent, useEffect } from "react";
+import { useState, MouseEvent, useEffect, useMemo } from "react";
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Terminal, Bot, Settings, PlusCircle, Trash2 } from "lucide-react";
+import { Play, Pause, Terminal, Bot, Settings, PlusCircle, Trash2, Eye, X as XIcon, AreaChart as AreaChartIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { Bot as BotType, Log, BotStatus } from "@/lib/types";
-
+import type { Bot as BotType, Log, BotStatus, BotConfig } from "@/lib/types";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 
 const initialBots: BotType[] = [
-    { id: 1, name: "BTC-RSI Stratejisi", pair: "BTC/USDT", status: "Çalışıyor", pnl: 12.5, duration: "2g 5sa" },
-    { id: 2, name: "ETH-MACD Scalp", pair: "ETH/USDT", status: "Durduruldu", pnl: -3.2, duration: "12sa 15dk" },
-    { id: 3, name: "SOL-Trend Follow", pair: "SOL/USDT", status: "Çalışıyor", pnl: 8.9, duration: "5g 1sa" },
-    { id: 4, name: "AVAX Arbitraj", pair: "AVAX/USDT", status: "Hata", pnl: 0, duration: "1sa" },
+    { id: 1, name: "BTC-RSI Stratejisi", pair: "BTC/USDT", status: "Çalışıyor", pnl: 12.5, duration: "2g 5sa", config: { stopLoss: 2, takeProfit: 5, trailingStop: false, amountType: 'fixed', amount: 100, leverage: 5 } },
+    { id: 2, name: "ETH-MACD Scalp", pair: "ETH/USDT", status: "Durduruldu", pnl: -3.2, duration: "12sa 15dk", config: { stopLoss: 1.5, takeProfit: 3, trailingStop: true, amountType: 'percentage', amount: 10, leverage: 10 } },
+    { id: 3, name: "SOL-Trend Follow", pair: "SOL/USDT", status: "Çalışıyor", pnl: 8.9, duration: "5g 1sa", config: { stopLoss: 5, takeProfit: 10, trailingStop: false, amountType: 'fixed', amount: 250, leverage: 3 } },
+    { id: 4, name: "AVAX Arbitraj", pair: "AVAX/USDT", status: "Hata", pnl: 0, duration: "1sa", config: { stopLoss: 3, takeProfit: 6, trailingStop: false, amountType: 'fixed', amount: 50, leverage: 1 } },
 ];
 
 type LogType = 'info' | 'trade' | 'warning' | 'error';
@@ -36,37 +41,48 @@ const logTypeConfig: Record<LogType, string> = {
 };
 
 const statusConfig: Record<BotStatus, { badge: "default" | "secondary" | "destructive", dot: string, icon: JSX.Element, action: string }> = {
-    "Çalışıyor": {
-        badge: "default",
-        dot: "bg-green-500 animate-pulse",
-        icon: <Pause className="h-4 w-4" />,
-        action: "Durdur"
-    },
-    "Durduruldu": {
-        badge: "secondary",
-        dot: "bg-gray-500",
-        icon: <Play className="h-4 w-4" />,
-        action: "Başlat"
-    },
-    "Hata": {
-        badge: "destructive",
-        dot: "bg-red-500",
-        icon: <Play className="h-4 w-4" />,
-        action: "Tekrar Dene"
+    "Çalışıyor": { badge: "default", dot: "bg-green-500 animate-pulse", icon: <Pause className="h-4 w-4" />, action: "Durdur" },
+    "Durduruldu": { badge: "secondary", dot: "bg-gray-500", icon: <Play className="h-4 w-4" />, action: "Başlat" },
+    "Hata": { badge: "destructive", dot: "bg-red-500", icon: <Play className="h-4 w-4" />, action: "Tekrar Dene" }
+};
+
+// Helper to generate mock performance data for the detail panel chart
+const generateBotPerformanceData = (pnl: number) => {
+    const data = [];
+    let value = 1000; // Start with a base value
+    for (let i = 29; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        data.push({
+            name: date.toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' }),
+            profit: value,
+        });
+        const fluctuation = pnl > 0 ? (Math.random() * 0.02) : (Math.random() * 0.01 - 0.005);
+        value *= (1 + (pnl / 100 / 30) + fluctuation);
     }
+    return data;
 };
 
 export default function BotStatusPage() {
     const [bots, setBots] = useState<BotType[]>([]);
     const [logs, setLogs] = useState<Log[]>(initialLogs);
     const [isClient, setIsClient] = useState(false);
-
+    const [selectedBot, setSelectedBot] = useState<BotType | null>(null);
+    const [editedConfig, setEditedConfig] = useState<BotConfig | undefined>(undefined);
+    const { toast } = useToast();
+    
     useEffect(() => {
         setIsClient(true);
         try {
             const storedBots = localStorage.getItem('myBots');
             if (storedBots) {
-                setBots(JSON.parse(storedBots));
+                const parsedBots = JSON.parse(storedBots);
+                // Ensure every bot has a default config if it's missing
+                const botsWithConfig = parsedBots.map((bot: BotType) => ({
+                    ...bot,
+                    config: bot.config || initialBots[0].config, 
+                }));
+                setBots(botsWithConfig);
             } else {
                 setBots(initialBots);
             }
@@ -86,6 +102,13 @@ export default function BotStatusPage() {
         }
     }, [bots, isClient]);
 
+    useEffect(() => {
+        if (selectedBot) {
+            setEditedConfig(selectedBot.config);
+        } else {
+            setEditedConfig(undefined);
+        }
+    }, [selectedBot]);
 
     const addLog = (type: LogType, message: string) => {
         const timestamp = new Date().toLocaleTimeString('tr-TR', { hour12: false });
@@ -117,10 +140,36 @@ export default function BotStatusPage() {
         }
     };
     
-    const handleSettings = (e: MouseEvent, botId: number) => {
+    const handleViewDetails = (e: MouseEvent, bot: BotType) => {
         e.stopPropagation();
-        window.alert(`Ayarlar modülü bot #${botId} için henüz aktif değil.`);
+        setSelectedBot(bot);
     }
+
+    const handleConfigChange = (field: keyof BotConfig, value: any) => {
+        if (editedConfig) {
+            setEditedConfig(prev => ({...prev!, [field]: value}));
+        }
+    }
+
+    const handleUpdateConfig = () => {
+        if (!selectedBot || !editedConfig) return;
+
+        setBots(prevBots => prevBots.map(bot => 
+            bot.id === selectedBot.id ? { ...bot, config: editedConfig } : bot
+        ));
+
+        toast({
+            title: "Ayarlar Güncellendi",
+            description: `"${selectedBot.name}" botunun konfigürasyonu kaydedildi.`,
+        });
+
+        setSelectedBot(prev => prev ? {...prev, config: editedConfig} : null);
+    }
+    
+    const botPerformanceData = useMemo(() => {
+        return selectedBot ? generateBotPerformanceData(selectedBot.pnl) : [];
+    }, [selectedBot]);
+
 
     return (
         <div className="flex flex-col h-full p-4 md:p-6 bg-background overflow-y-auto space-y-6">
@@ -151,11 +200,11 @@ export default function BotStatusPage() {
                                         </CardDescription>
                                     </div>
                                     <div className="flex gap-1">
+                                        <Button variant="ghost" size="icon" onClick={(e) => handleViewDetails(e, bot)} aria-label="Detaylar">
+                                            <Eye className="h-4 w-4"/>
+                                        </Button>
                                         <Button variant="ghost" size="icon" onClick={(e) => handleToggleStatus(e, bot.id)} aria-label={config.action}>
                                             {config.icon}
-                                        </Button>
-                                         <Button variant="ghost" size="icon" onClick={(e) => handleSettings(e, bot.id)}>
-                                            <Settings className="h-4 w-4"/>
                                         </Button>
                                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => handleDeleteBot(e, bot.id)} aria-label="Sil">
                                             <Trash2 className="h-4 w-4"/>
@@ -207,6 +256,83 @@ export default function BotStatusPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Bot Detay Paneli (Sheet) */}
+            <Sheet open={!!selectedBot} onOpenChange={(isOpen) => !isOpen && setSelectedBot(null)}>
+                <SheetContent className="w-[400px] sm:w-[540px] bg-slate-900 border-slate-800 text-white p-0">
+                    {selectedBot && (
+                        <>
+                            <SheetHeader className="p-6">
+                                <SheetTitle className="font-headline text-2xl flex items-center gap-3">
+                                    <Bot className="h-6 w-6 text-primary" /> {selectedBot.name}
+                                </SheetTitle>
+                                <SheetDescription className="flex items-center gap-4 pt-2">
+                                     <span className="text-muted-foreground font-mono">{selectedBot.pair}</span>
+                                     <Badge variant={statusConfig[selectedBot.status].badge}>{selectedBot.status}</Badge>
+                                </SheetDescription>
+                            </SheetHeader>
+                            <Tabs defaultValue="overview" className="w-full">
+                                <TabsList className="grid w-full grid-cols-2 bg-slate-800/50 mx-6">
+                                    <TabsTrigger value="overview"><AreaChartIcon className="mr-2 h-4 w-4" />Genel Bakış</TabsTrigger>
+                                    <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4" />Ayarlar</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="overview" className="p-6">
+                                    <div className="space-y-6">
+                                        <Card className="bg-slate-800/50">
+                                            <CardHeader><CardTitle className="text-base font-semibold">Performans (Son 30 Gün)</CardTitle></CardHeader>
+                                            <CardContent className="h-48">
+                                                 <ResponsiveContainer width="100%" height="100%">
+                                                    <AreaChart data={botPerformanceData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                                                        <defs>
+                                                            <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                                                                <stop offset="5%" stopColor={selectedBot.pnl >= 0 ? "hsl(var(--primary))" : "hsl(var(--destructive))"} stopOpacity={0.8}/>
+                                                                <stop offset="95%" stopColor={selectedBot.pnl >= 0 ? "hsl(var(--primary))" : "hsl(var(--destructive))"} stopOpacity={0.1}/>
+                                                            </linearGradient>
+                                                        </defs>
+                                                        <YAxis stroke="rgba(255,255,255,0.4)" fontSize={12} tickFormatter={(val) => `$${(val/1000).toFixed(1)}k`}/>
+                                                        <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '0.5rem' }} />
+                                                        <Area type="monotone" dataKey="profit" stroke={selectedBot.pnl >= 0 ? "hsl(var(--primary))" : "hsl(var(--destructive))"} fill="url(#colorProfit)" strokeWidth={2} />
+                                                    </AreaChart>
+                                                </ResponsiveContainer>
+                                            </CardContent>
+                                        </Card>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <Card className="bg-slate-800/50"><CardHeader><CardDescription>Toplam K&Z</CardDescription><CardTitle className={cn(selectedBot.pnl >= 0 ? "text-green-400" : "text-red-400")}>{selectedBot.pnl.toFixed(2)}%</CardTitle></CardHeader></Card>
+                                            <Card className="bg-slate-800/50"><CardHeader><CardDescription>Çalışma Süresi</CardDescription><CardTitle>{selectedBot.duration}</CardTitle></CardHeader></Card>
+                                            <Card className="bg-slate-800/50"><CardHeader><CardDescription>Toplam İşlem</CardDescription><CardTitle>142</CardTitle></CardHeader></Card>
+                                            <Card className="bg-slate-800/50"><CardHeader><CardDescription>Başarı Oranı</CardDescription><CardTitle>72%</CardTitle></CardHeader></Card>
+                                        </div>
+                                    </div>
+                                </TabsContent>
+                                <TabsContent value="settings" className="p-6">
+                                    {editedConfig ? (
+                                        <div className="space-y-6">
+                                            <div>
+                                                <h4 className="font-semibold mb-3">Risk Yönetimi</h4>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2"><Label>Stop Loss (%)</Label><Input type="number" value={editedConfig.stopLoss} onChange={(e) => handleConfigChange('stopLoss', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/></div>
+                                                    <div className="space-y-2"><Label>Take Profit (%)</Label><Input type="number" value={editedConfig.takeProfit} onChange={(e) => handleConfigChange('takeProfit', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/></div>
+                                                </div>
+                                            </div>
+                                             <div>
+                                                <h4 className="font-semibold mb-3">Pozisyon</h4>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2"><Label>Miktar ({editedConfig.amountType === 'fixed' ? '$' : '%'})</Label><Input type="number" value={editedConfig.amount} onChange={(e) => handleConfigChange('amount', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/></div>
+                                                    <div className="space-y-2"><Label>Kaldıraç</Label><Input type="number" value={editedConfig.leverage} onChange={(e) => handleConfigChange('leverage', parseInt(e.target.value, 10))} className="bg-slate-800 border-slate-700"/></div>
+                                                </div>
+                                            </div>
+                                            <Button onClick={handleUpdateConfig} className="w-full">Ayarları Güncelle</Button>
+                                        </div>
+                                    ) : (
+                                        <p className="text-muted-foreground">Bu bot için konfigürasyon verisi bulunamadı.</p>
+                                    )}
+                                </TabsContent>
+                            </Tabs>
+                        </>
+                    )}
+                </SheetContent>
+            </Sheet>
+
         </div>
     );
 }
