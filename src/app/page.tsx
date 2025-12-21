@@ -11,8 +11,6 @@ import {
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart as RechartsBarChart,
   Pie,
   PieChart,
   Cell,
@@ -64,10 +62,10 @@ export default function DashboardPage() {
     // --- KPI Calculations ---
     const activeBots = bots.filter(bot => bot.status === "Çalışıyor").length;
     const totalPnl = bots.reduce((acc, bot) => acc + bot.pnl, 0);
-    const initialPortfolioValue = 125789.00;
-    // Assuming PNL is a percentage of an initial trade value, let's simplify for now
-    // and just add the PNL value as a dollar amount for demonstration.
-    const portfolioValue = initialPortfolioValue + bots.reduce((acc, bot) => acc + (bot.pnl/100 * 1000),0) ; // Simplified calculation
+    const initialPortfolioValue = 10000.00;
+    
+    // Simplified portfolio calculation: each bot is assumed to trade with $1000
+    const portfolioValue = initialPortfolioValue + bots.reduce((acc, bot) => acc + (bot.pnl/100 * 1000), 0);
     
     const winningBots = bots.filter(bot => bot.pnl > 0).length;
     const winRate = bots.length > 0 ? (winningBots / bots.length) * 100 : 0;
@@ -83,9 +81,20 @@ export default function DashboardPage() {
         name,
         value,
     }));
+    
+    const chartConfig = {
+      value: {
+        label: "Value",
+      },
+      ...pieChartData.reduce((acc, { name }) => {
+        acc[name] = { label: name };
+        return acc;
+      }, {} as any)
+    };
+
 
     const performanceData = isClient ? generatePerformanceData(portfolioValue) : [];
-    const recentBots = [...bots].reverse().slice(0, 5);
+    const recentBots = [...bots].sort((a, b) => b.id - a.id).slice(0, 5);
 
 
   if (!isClient) {
@@ -179,7 +188,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex items-center justify-center">
              {pieChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
+                <ChartContainer config={chartConfig} className="h-[300px] w-full">
                     <PieChart>
                         <Pie
                             data={pieChartData}
@@ -205,9 +214,9 @@ export default function DashboardPage() {
                             ))}
                         </Pie>
                         <Legend />
-                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <ChartTooltip content={<ChartTooltipContent hideLabel />} />
                     </PieChart>
-                </ResponsiveContainer>
+                </ChartContainer>
              ) : (
                 <div className="h-[300px] flex flex-col items-center justify-center text-muted-foreground">
                     <BarChart className="h-10 w-10 mb-2"/>
