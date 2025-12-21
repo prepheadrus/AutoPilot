@@ -14,6 +14,8 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 const initialBots: BotType[] = [
     { id: 1, name: "BTC-RSI Stratejisi", pair: "BTC/USDT", status: "Çalışıyor", pnl: 12.5, duration: "2g 5sa", config: { mode: 'PAPER', stopLoss: 2, takeProfit: 5, trailingStop: false, amountType: 'fixed', amount: 100, leverage: 5, initialBalance: 10000, currentBalance: 11250, inPosition: true, entryPrice: 65000, positionSize: 0.1 } },
@@ -292,7 +294,7 @@ export default function BotStatusPage() {
               </Button>
             </div>
             
-            {!hasApiKeys && (
+            {!hasApiKeys && isClient && (
                 <Card className="border-l-4 border-yellow-500 bg-yellow-500/10">
                     <CardHeader className="flex flex-row items-center gap-4">
                         <AlertTriangle className="h-8 w-8 text-yellow-500" />
@@ -489,3 +491,5 @@ export default function BotStatusPage() {
         </div>
     );
 }
+
+    
