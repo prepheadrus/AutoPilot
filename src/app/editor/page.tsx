@@ -64,11 +64,6 @@ export default function StrategyEditorPage() {
   const [isCompiling, setIsCompiling] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
 
   const onConnect = useCallback(
     (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
@@ -80,9 +75,10 @@ export default function StrategyEditorPage() {
     let nodeLabel = "Yeni Düğüm";
     let nodeData = {};
     
+    // Make position slightly random to avoid overlap
     const position = {
-        x: 400,
-        y: 200,
+        x: 250 + Math.random() * 150,
+        y: 100 + Math.random() * 150,
     };
 
     if (type === 'indicator') {
@@ -130,7 +126,7 @@ export default function StrategyEditorPage() {
       toast({
         title: 'Test Başarılı',
         description: data.message,
-        variant: data.message.includes('[SİMÜLASYON]') ? 'default' : 'default',
+        variant: 'default',
       });
 
     } catch (error) {
@@ -146,11 +142,9 @@ export default function StrategyEditorPage() {
   };
 
   const handleSaveStrategy = () => {
-    if (!isClient) return;
-
     const botName = window.prompt("Yeni botunuz için bir isim girin:");
 
-    if (botName) {
+    if (botName && botName.trim() !== '') {
       try {
         const newBot: Bot = {
           id: Date.now(),
@@ -161,8 +155,8 @@ export default function StrategyEditorPage() {
           duration: "0s",
         };
 
-        const storedBots = localStorage.getItem('myBots');
-        const bots: Bot[] = storedBots ? JSON.parse(storedBots) : [];
+        const storedBotsJSON = localStorage.getItem('myBots');
+        const bots: Bot[] = storedBotsJSON ? JSON.parse(storedBotsJSON) : [];
         bots.push(newBot);
         localStorage.setItem('myBots', JSON.stringify(bots));
 
@@ -181,17 +175,7 @@ export default function StrategyEditorPage() {
         console.error("Bot kaydetme hatası:", error);
       }
     } else if (botName !== null) { // Handle empty string case
-        toast({
-            title: 'İptal Edildi',
-            description: 'Lütfen bot için bir isim girin.',
-            variant: 'secondary'
-        });
-    } else { // Handle cancel button case
-         toast({
-            title: 'İptal Edildi',
-            description: 'Bot kaydetme işlemi iptal edildi.',
-            variant: 'secondary'
-        });
+        window.alert('İsim girmediniz, işlem iptal edildi.');
     }
   };
 
@@ -211,7 +195,7 @@ export default function StrategyEditorPage() {
             </Button>
         </aside>
 
-        <main className="flex-1 relative">
+        <main className="flex-1 relative h-full">
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -231,7 +215,7 @@ export default function StrategyEditorPage() {
                     {isCompiling ? (
                         <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Çalıştırılıyor...</>
                     ) : (
-                        "▶ Stratejiyi Test Et"
+                        "Stratejiyi Test Et"
                     )}
                 </Button>
                 <Button variant="secondary" onClick={handleSaveStrategy}>

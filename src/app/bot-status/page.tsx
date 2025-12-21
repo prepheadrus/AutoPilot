@@ -4,7 +4,7 @@ import { useState, MouseEvent, useEffect } from "react";
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Terminal, Bot, Settings, PlusCircle, Trash2, Save } from "lucide-react";
+import { Play, Pause, Terminal, Bot, Settings, PlusCircle, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Bot as BotType, Log, BotStatus } from "@/lib/types";
@@ -99,7 +99,7 @@ export default function BotStatusPage() {
                 if (bot.status === "Çalışıyor") {
                     addLog('info', `"${bot.name}" botu kullanıcı tarafından durduruldu.`);
                     return { ...bot, status: "Durduruldu" as BotStatus };
-                } else if (bot.status === "Durduruldu" || bot.status === "Hata") {
+                } else {
                     addLog('info', `"${bot.name}" botu kullanıcı tarafından başlatıldı.`);
                     return { ...bot, status: "Çalışıyor" as BotStatus };
                 }
@@ -137,7 +137,7 @@ export default function BotStatusPage() {
                 {bots.map((bot) => {
                     const config = statusConfig[bot.status];
                     return (
-                        <Card key={bot.id} className="flex flex-col border-l-4 border-transparent data-[status=Çalışıyor]:border-primary data-[status=Hata]:border-destructive" data-status={bot.status}>
+                        <Card key={bot.id} className="flex flex-col border-l-4 border-transparent data-[status=Çalışıyor]:border-primary data-[status=Hata]:border-destructive transition-all hover:shadow-lg" data-status={bot.status}>
                             <CardHeader>
                                 <div className="flex items-start justify-between">
                                     <div>
@@ -201,7 +201,7 @@ export default function BotStatusPage() {
                     <div className="bg-black rounded-lg p-4 font-mono text-sm text-white/90 h-64 overflow-y-auto space-y-1 flex flex-col-reverse">
                        <div>
                          {logs.map((log, index) => (
-                            <p key={index}><span className={cn(logTypeConfig[log.type])}>[{log.type.toUpperCase()}]</span> {log.message}</p>
+                            <p key={index}><span className={cn(logTypeConfig[log.type], "font-bold")}>[{log.type.toUpperCase()}]</span> {log.message}</p>
                         ))}
                        </div>
                     </div>
