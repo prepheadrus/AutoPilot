@@ -32,8 +32,12 @@ const navItems = [
   { href: "/settings", label: "Ayarlar", icon: Settings },
 ];
 
-function NavigationLinks() {
+function NavigationLinks({ inSheet = false }: { inSheet?: boolean }) {
   const pathname = usePathname();
+  const linkClass = inSheet ? "hover:text-foreground" : "transition-colors hover:text-foreground flex items-center gap-2";
+  const activeClass = inSheet ? "text-foreground" : "text-foreground";
+  const inactiveClass = inSheet ? "text-muted-foreground" : "text-muted-foreground";
+
   return (
     <>
       {navItems.map((item) => (
@@ -41,11 +45,11 @@ function NavigationLinks() {
           key={item.href}
           href={item.href}
           className={cn(
-            "transition-colors hover:text-foreground flex items-center gap-2",
-            pathname === item.href ? "text-foreground" : "text-muted-foreground"
+            linkClass,
+            pathname === item.href ? activeClass : inactiveClass
           )}
         >
-          <item.icon className="h-4 w-4"/>
+          {!inSheet && <item.icon className="h-4 w-4"/>}
           {item.label}
         </Link>
       ))}
@@ -53,32 +57,6 @@ function NavigationLinks() {
   );
 }
 
-function MobileNavigationLinks() {
-    const pathname = usePathname();
-    return (
-        <nav className="grid gap-6 text-lg font-medium">
-            <Link
-            href="#"
-            className="flex items-center gap-2 text-lg font-semibold text-primary"
-            >
-            <Bot className="h-6 w-6" />
-            <span className="sr-only">AutoPilot</span>
-            </Link>
-            {navItems.map((item) => (
-            <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                "hover:text-foreground",
-                    pathname === item.href ? "text-foreground" : "text-muted-foreground"
-                )}
-            >
-                {item.label}
-            </Link>
-            ))}
-        </nav>
-    );
-}
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const userAvatar = PlaceHolderImages.find(p => p.id === 'user-avatar') as ImagePlaceholder;
@@ -112,7 +90,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </Button>
           </SheetTrigger>
           <SheetContent side="left">
-            <MobileNavigationLinks />
+            <nav className="grid gap-6 text-lg font-medium">
+                <Link
+                href="#"
+                className="flex items-center gap-2 text-lg font-semibold text-primary"
+                >
+                <Bot className="h-6 w-6" />
+                <span className="sr-only">AutoPilot</span>
+                </Link>
+                <NavigationLinks inSheet={true} />
+            </nav>
           </SheetContent>
         </Sheet>
         
@@ -136,7 +123,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
         </div>
       </header>
-       <main className={cn("flex flex-1 flex-col", isEditorPage ? "overflow-hidden" : "p-6")}>
+       <main className={cn("flex-1", isEditorPage ? "overflow-hidden flex" : "p-6 flex flex-col")}>
           {children}
       </main>
     </div>
