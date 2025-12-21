@@ -2,9 +2,10 @@
 
 import { useState, MouseEvent, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from 'next/link';
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Terminal, Bot, Settings, PlusCircle, Trash2, Eye, X as XIcon, AreaChart as AreaChartIcon, Activity, AlertTriangle } from "lucide-react";
+import { Play, Pause, Terminal, Bot, Settings, PlusCircle, Trash2, Eye, X as XIcon, AreaChart as AreaChartIcon, Activity, AlertTriangle, Edit } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Bot as BotType, Log, BotStatus, BotConfig } from "@/lib/types";
@@ -87,6 +88,7 @@ export default function BotStatusPage() {
     const [editedConfig, setEditedConfig] = useState<BotConfig | undefined>(undefined);
     const [hasApiKeys, setHasApiKeys] = useState(false);
     const { toast } = useToast();
+    const router = useRouter();
     const intervalRefs = useRef<Record<number, NodeJS.Timeout>>({});
     
     const addLog = useCallback((type: LogType, message: string) => {
@@ -271,6 +273,11 @@ export default function BotStatusPage() {
         e.stopPropagation();
         setSelectedBot(bot);
     }
+    
+    const handleEditBot = (e: MouseEvent, botId: number) => {
+        e.stopPropagation();
+        router.push(`/editor?editBotId=${botId}`);
+    }
 
     const handleConfigChange = (field: keyof BotConfig, value: any) => {
         if (editedConfig) {
@@ -367,6 +374,9 @@ export default function BotStatusPage() {
                                     <div className="flex gap-1">
                                         <Button variant="ghost" size="icon" onClick={(e) => handleViewDetails(e, bot)} aria-label="Detaylar">
                                             <Eye className="h-4 w-4"/>
+                                        </Button>
+                                         <Button variant="ghost" size="icon" onClick={(e) => handleEditBot(e, bot.id)} aria-label="Düzenle">
+                                            <Edit className="h-4 w-4" />
                                         </Button>
                                         <Button variant="ghost" size="icon" onClick={(e) => handleToggleStatus(e, bot.id)} aria-label={config.action}>
                                             {config.icon}

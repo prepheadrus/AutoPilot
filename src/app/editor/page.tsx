@@ -358,6 +358,7 @@ export default function StrategyEditorPage() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [strategyConfig, setStrategyConfig] = useState<BotConfig>(initialStrategyConfig);
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
+  const [editingBotId, setEditingBotId] = useState<number | null>(null);
 
   const { toast } = useToast();
   const router = useRouter();
@@ -365,7 +366,32 @@ export default function StrategyEditorPage() {
 
   useEffect(() => {
     const symbol = searchParams.get('symbol');
-    if (symbol) {
+    const editBotId = searchParams.get('editBotId');
+
+    if (editBotId) {
+        try {
+            const storedBotsJSON = localStorage.getItem('myBots');
+            const bots: Bot[] = storedBotsJSON ? JSON.parse(storedBotsJSON) : [];
+            const botToEdit = bots.find(b => b.id === Number(editBotId));
+
+            if (botToEdit) {
+                setEditingBotId(botToEdit.id);
+                setNodes(botToEdit.nodes || initialNodes);
+                setEdges(botToEdit.edges || initialEdges);
+                setStrategyConfig(botToEdit.config || initialStrategyConfig);
+                toast({
+                  title: `Strateji Yüklendi: "${botToEdit.name}"`,
+                  description: "Stratejiyi düzenleyip 'Kaydet' butonuna basarak güncelleyebilirsiniz.",
+                });
+            } else {
+                 toast({ title: "Hata", description: "Düzenlenecek bot bulunamadı.", variant: 'destructive'});
+                 router.push('/editor');
+            }
+        } catch (error) {
+            toast({ title: "Hata", description: "Bot verileri yüklenirken bir sorun oluştu.", variant: 'destructive'});
+            router.push('/editor');
+        }
+    } else if (symbol) {
       setNodes((nds) => 
         nds.map((node) => {
           if (node.type === 'dataSource') {
@@ -375,7 +401,7 @@ export default function StrategyEditorPage() {
         })
       );
     }
-  }, [searchParams, setNodes]);
+  }, [searchParams, setNodes, setEdges, router, toast]);
 
   const onConnect = useCallback(
     (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
@@ -504,36 +530,61 @@ export default function StrategyEditorPage() {
   };
 
   const handleSaveStrategy = () => {
-    const botName = window.prompt("Yeni botunuz için bir isim girin:");
-
-    if (botName && botName.trim() !== '') {
-      try {
+     try {
+        const storedBotsJSON = localStorage.getItem('myBots');
+        const bots: Bot[] = storedBotsJSON ? JSON.parse(storedBotsJSON) : [];
         const dataSourceNode = nodes.find(n => n.type === 'dataSource');
         const symbol = dataSourceNode?.data.symbol || 'BTC/USDT';
 
-        const newBot: Bot = {
-          id: Date.now(),
-          name: botName,
-          pair: symbol,
-          status: 'Durduruldu',
-          pnl: 0,
-          duration: "0s",
-          config: strategyConfig,
-          nodes: nodes,
-          edges: edges,
-        };
+        if(editingBotId) {
+            // Update existing bot
+            const updatedBots = bots.map(bot => {
+                if (bot.id === editingBotId) {
+                    return {
+                        ...bot,
+                        pair: symbol,
+                        config: strategyConfig,
+                        nodes: nodes,
+                        edges: edges,
+                    };
+                }
+                return bot;
+            });
+            localStorage.setItem('myBots', JSON.stringify(updatedBots));
+            const botName = updatedBots.find(b => b.id === editingBotId)?.name;
+            toast({
+              title: 'Strateji Güncellendi!',
+              description: `"${botName}" adlı botun yapısı ve ayarları güncellendi.`,
+            });
+        } else {
+            // Create new bot
+            const botName = window.prompt("Yeni botunuz için bir isim girin:");
+            if (!botName || botName.trim() === '') {
+                 toast({ title: 'İşlem İptal Edildi', description: 'Bot için bir isim girmediniz.', variant: 'secondary'});
+                 return;
+            }
 
-        const storedBotsJSON = localStorage.getItem('myBots');
-        const bots: Bot[] = storedBotsJSON ? JSON.parse(storedBotsJSON) : [];
-        bots.push(newBot);
-        localStorage.setItem('myBots', JSON.stringify(bots));
-
-        toast({
-          title: 'Strateji Kaydedildi!',
-          description: `"${botName}" adlı yeni bot oluşturuldu.`,
-        });
+            const newBot: Bot = {
+              id: Date.now(),
+              name: botName,
+              pair: symbol,
+              status: 'Durduruldu',
+              pnl: 0,
+              duration: "0s",
+              config: strategyConfig,
+              nodes: nodes,
+              edges: edges,
+            };
+            bots.push(newBot);
+            localStorage.setItem('myBots', JSON.stringify(bots));
+             toast({
+              title: 'Strateji Kaydedildi!',
+              description: `"${botName}" adlı yeni bot oluşturuldu.`,
+            });
+        }
 
         router.push('/bot-status');
+
       } catch (error) {
         toast({
           title: 'Kayıt Hatası',
@@ -542,13 +593,6 @@ export default function StrategyEditorPage() {
         });
         console.error("Bot kaydetme hatası:", error);
       }
-    } else if (botName !== null) {
-        toast({
-            title: 'İşlem İptal Edildi',
-            description: 'Bot için bir isim girmediniz.',
-            variant: 'secondary'
-        });
-    }
   };
   
   const handleBacktest = () => {
