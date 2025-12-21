@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, DragEvent, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
@@ -12,8 +12,6 @@ import {
   Edge,
   MarkerType,
   Node,
-  ReactFlowProvider,
-  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -32,116 +30,88 @@ const nodeTypes = {
 };
 
 const initialNodes: Node[] = [
-  { 
-    id: '1', 
-    type: 'indicator', 
-    position: { x: 50, y: 150 }, 
-    data: { label: 'RSI İndikatörü', indicatorType: 'rsi', period: 14 } 
+  {
+    id: '1',
+    type: 'indicator',
+    position: { x: 50, y: 50 },
+    data: { label: 'RSI İndikatörü', indicatorType: 'rsi', period: 14 }
   },
   {
     id: '2',
     type: 'logic',
-    position: { x: 350, y: 150 },
+    position: { x: 350, y: 50 },
     data: { label: 'Koşul', operator: 'lt', value: 30 }
   },
-  { 
-    id: '3', 
+  {
+    id: '3',
     type: 'action',
-    position: { x: 650, y: 150 }, 
-    data: { label: 'Alış Emri', actionType: 'buy', amount: 100 } 
+    position: { x: 650, y: 50 },
+    data: { label: 'Alış Emri', actionType: 'buy', amount: 100 }
   },
 ];
 
 const initialEdges: Edge[] = [
-    { id: 'e1-2', source: '1', target: '2', markerEnd: { type: MarkerType.ArrowClosed } },
-    { id: 'e2-3', source: '2', target: '3', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'e1-2', source: '1', target: '2', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'e2-3', source: '2', target: '3', markerEnd: { type: MarkerType.ArrowClosed } },
 ];
 
 
-const Sidebar = () => {
-    const onDragStart = (event: DragEvent<HTMLDivElement>, nodeType: string) => {
-        if (event.dataTransfer) {
-            event.dataTransfer.setData('application/reactflow', nodeType);
-            event.dataTransfer.effectAllowed = 'move';
-        }
-    };
-
+const Sidebar = ({ onAddNode }: { onAddNode: (type: string) => void }) => {
     return (
-        <aside className="absolute top-4 left-4 z-10 bg-card/80 backdrop-blur-sm border p-2 rounded-lg shadow-xl flex flex-col gap-2 w-56">
-            <h3 className="font-bold px-2 py-1 text-sm text-foreground">Araç Kutusu</h3>
-             <div draggable onDragStart={(event) => onDragStart(event, 'indicator')} className="flex justify-start items-center gap-2 cursor-grab bg-background border rounded p-2 text-sm hover:bg-muted">
-                <Rss className="text-blue-500" /> İndikatör
-            </div>
-            <div draggable onDragStart={(event) => onDragStart(event, 'logic')} className="flex justify-start items-center gap-2 cursor-grab bg-background border rounded p-2 text-sm hover:bg-muted">
-                <GitBranch className="text-purple-500" /> Mantık/Koşul
-            </div>
-            <div draggable onDragStart={(event) => onDragStart(event, 'action')} className="flex justify-start items-center gap-2 cursor-grab bg-background border rounded p-2 text-sm hover:bg-muted">
-                <CircleDollarSign className="text-green-500" /> İşlem (Al/Sat)
-            </div>
+        <aside className="w-64 bg-card border-r flex flex-col gap-2 p-4">
+            <h3 className="font-bold text-lg text-foreground mb-4">Araç Kutusu</h3>
+             <Button variant="outline" className="justify-start gap-2" onClick={() => onAddNode('indicator')}>
+                <Rss className="text-blue-500" /> İndikatör Ekle
+            </Button>
+            <Button variant="outline" className="justify-start gap-2" onClick={() => onAddNode('logic')}>
+                <GitBranch className="text-purple-500" /> Mantık Ekle
+            </Button>
+            <Button variant="outline" className="justify-start gap-2" onClick={() => onAddNode('action')}>
+                <CircleDollarSign className="text-green-500" /> İşlem Ekle
+            </Button>
         </aside>
     );
 };
 
-// İçerik Bileşeni: Tüm React Flow mantığı burada
-function StrategyBuilder() {
-  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+export default function StrategyEditorPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isCompiling, setIsCompiling] = useState(false);
   const [logs, setLogs] = useState<string[]>(['> [SİSTEM] Editör başlatıldı. Stratejinizi oluşturun veya test edin.']);
-  const { screenToFlowPosition } = useReactFlow();
 
   const onConnect = useCallback(
     (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
     [setEdges],
   );
 
-  const onDragOver = useCallback((event: DragEvent) => {
-    event.preventDefault();
-    if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = 'move';
+  const addNode = useCallback((type: string) => {
+    let nodeLabel = "Yeni Düğüm";
+    let nodeData = {};
+    const position = {
+        x: Math.random() * 400,
+        y: Math.random() * 400,
+    };
+
+    if (type === 'indicator') {
+      nodeLabel = 'Yeni İndikatör';
+      nodeData = { label: nodeLabel, indicatorType: 'rsi', period: 14 };
+    } else if (type === 'logic') {
+      nodeLabel = 'Yeni Koşul';
+      nodeData = { label: nodeLabel, operator: 'lt', value: 30 };
+    } else if (type === 'action') {
+      nodeLabel = 'Yeni İşlem';
+      nodeData = { label: nodeLabel, actionType: 'buy', amount: 100 };
     }
-  }, []);
 
-  const onDrop = useCallback(
-    (event: DragEvent) => {
-      event.preventDefault();
+    const newNode: Node = {
+      id: `${type}-${Date.now()}`,
+      type,
+      position,
+      data: nodeData,
+    };
 
-      const type = event.dataTransfer.getData('application/reactflow');
-
-      if (typeof type === 'undefined' || !type || !reactFlowWrapper.current) {
-        return;
-      }
-      
-      const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
-      
-      let nodeLabel = "Yeni Düğüm";
-      let nodeData = {};
-      if (type === 'indicator') {
-        nodeLabel = 'Yeni İndikatör';
-        nodeData = { label: nodeLabel, indicatorType: 'rsi', period: 14 };
-      } else if (type === 'logic') {
-        nodeLabel = 'Yeni Koşul';
-        nodeData = { label: nodeLabel, operator: 'lt', value: 30 };
-      } else if (type === 'action') {
-        nodeLabel = 'Yeni İşlem';
-        nodeData = { label: nodeLabel, actionType: 'buy', amount: 100 };
-      }
-
-      const newNode: Node = {
-        id: `${type}-${Date.now()}`,
-        type,
-        position,
-        data: nodeData,
-      };
-
-      setNodes((nds) => nds.concat(newNode));
-    },
-    [screenToFlowPosition, setNodes]
-  );
+    setNodes((nds) => nds.concat(newNode));
+  }, [setNodes]);
 
 
   const handleRunStrategy = async () => {
@@ -173,70 +143,58 @@ function StrategyBuilder() {
   };
 
   return (
-    <div className="w-full h-full" ref={reactFlowWrapper}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
-        nodeTypes={nodeTypes}
-        fitView
-        className="bg-background"
-      >
-        <Background color="#334155" gap={20} size={1} />
-        <Controls />
-      </ReactFlow>
+    <div className="flex flex-row w-full h-full">
+        <Sidebar onAddNode={addNode} />
+        <main className="flex-1 relative">
+            <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                nodeTypes={nodeTypes}
+                fitView
+                className="bg-background"
+            >
+                <Background color="#334155" gap={20} size={1} />
+                <Controls />
+            </ReactFlow>
 
-      <Sidebar />
-
-      <div className="absolute top-4 right-4 z-10 flex gap-2">
-          <Button onClick={handleRunStrategy} disabled={isCompiling}>
-               {isCompiling ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Çalıştırılıyor...</>
-              ) : (
-                  "▶ Stratejiyi Test Et"
-              )}
-          </Button>
-           <Button variant="secondary" onClick={() => toast({ title: "Kaydedildi", description: "Stratejiniz başarıyla kaydedildi."})}>
-             Kaydet
-           </Button>
-      </div>
-      
-      <div className="absolute bottom-0 left-0 right-0 h-48 z-10 bg-black/80 backdrop-blur-sm border-t border-slate-700 text-white font-mono">
-        <div className="p-3 border-b border-slate-700 flex items-center gap-2">
-          <Terminal className="h-5 w-5"/>
-          <h3 className="font-bold text-sm">Sistem Kayıtları</h3>
-        </div>
-        <div className="p-4 text-sm overflow-y-auto h-[calc(100%-49px)]">
-          {logs.map((log, index) => (
-            <p key={index} className={cn(
-              'whitespace-pre-wrap', // Ensures logs wrap correctly
-              log.includes('[HATA]') && 'text-red-400',
-              log.includes('[BAŞARILI]') && 'text-green-400',
-              log.includes('[İSTEK]') && 'text-yellow-400',
-              log.includes('[SİSTEM]') && 'text-slate-400',
-              log.includes('[SİMÜLASYON]') && 'text-cyan-400',
-              log.includes('[CANLI]') && 'text-green-400',
-            )}>
-              {log}
-            </p>
-          ))}
-        </div>
-      </div>
+             <div className="absolute top-4 right-4 z-10 flex gap-2">
+                <Button onClick={handleRunStrategy} disabled={isCompiling}>
+                    {isCompiling ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Çalıştırılıyor...</>
+                    ) : (
+                        "▶ Stratejiyi Test Et"
+                    )}
+                </Button>
+                <Button variant="secondary" onClick={() => toast({ title: "Kaydedildi", description: "Stratejiniz başarıyla kaydedildi."})}>
+                    Kaydet
+                </Button>
+            </div>
+            
+            <div className="absolute bottom-0 left-0 right-0 h-48 z-10 bg-black/80 backdrop-blur-sm border-t border-slate-700 text-white font-mono">
+                <div className="p-3 border-b border-slate-700 flex items-center gap-2">
+                    <Terminal className="h-5 w-5"/>
+                    <h3 className="font-bold text-sm">Sistem Kayıtları</h3>
+                </div>
+                <div className="p-4 text-sm overflow-y-auto h-[calc(100%-49px)]">
+                {logs.map((log, index) => (
+                    <p key={index} className={cn(
+                    'whitespace-pre-wrap', 
+                    log.includes('[HATA]') && 'text-red-400',
+                    log.includes('[BAŞARILI]') && 'text-green-400',
+                    log.includes('[İSTEK]') && 'text-yellow-400',
+                    log.includes('[SİSTEM]') && 'text-slate-400',
+                    log.includes('[SİMÜLASYON]') && 'text-cyan-400',
+                    log.includes('[CANLI]') && 'text-green-400',
+                    )}>
+                    {log}
+                    </p>
+                ))}
+                </div>
+            </div>
+        </main>
     </div>
   );
-}
-
-// Ana Sayfa Bileşeni: Sadece ReactFlowProvider ile sarmalar
-export default function StrategyEditorPage() {
-    return (
-        <div className="w-full h-full relative">
-            <ReactFlowProvider>
-                <StrategyBuilder />
-            </ReactFlowProvider>
-        </div>
-    );
 }
