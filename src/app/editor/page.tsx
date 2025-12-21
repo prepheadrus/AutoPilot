@@ -145,8 +145,8 @@ export default function StrategyEditorPage() {
   return (
     <div className="flex flex-row w-full h-full">
         <Sidebar onAddNode={addNode} />
-        <main className="flex-1 relative flex flex-col">
-            <div className="relative flex-1">
+        <main className="flex-1 flex flex-col">
+            <div className="flex-1 relative">
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
