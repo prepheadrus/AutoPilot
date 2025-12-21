@@ -30,6 +30,7 @@ import {
   Scatter,
   ReferenceLine,
   Bar,
+  Cell,
 } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { RSI as RSICalculator, SMA as SMACalculator } from 'technicalindicators';
@@ -363,21 +364,28 @@ const TradeMarker = (props: any) => {
 // Custom Tooltip for combined chart
 const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
     if (active && payload && payload.length) {
-        const priceData = payload.find(p => p.dataKey === 'price')?.payload;
-        const pnlData = payload.find(p => p.dataKey === 'pnl');
-        const trade = payload.find(p => p.dataKey === 'tradeMarker')?.payload;
+        const data = payload[0].payload;
 
         return (
             <div className="p-2 bg-slate-800/80 border border-slate-700 rounded-md text-white text-xs backdrop-blur-sm">
                 <p className="font-bold">{`Tarih: ${label}`}</p>
-                {priceData && <p>Fiyat: <span className="font-mono">${priceData.price.toFixed(2)}</span></p>}
-                {pnlData && <p>Kâr: <span className="font-mono">${pnlData.value?.toFixed(2)}</span></p>}
-                {priceData && Object.keys(priceData).filter(k => k.includes('(')).map(key => (
-                     priceData[key] && <p key={key}>{key}: <span className="font-mono">{priceData[key].toFixed(2)}</span></p>
-                ))}
-                {trade && trade.type && (
-                     <p className={`font-bold mt-2 ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-                        {trade.type.toUpperCase()} @ ${trade.price?.toFixed(2)}
+                {data.price && <p>Fiyat: <span className="font-mono">${data.price.toFixed(2)}</span></p>}
+                {payload.find(p => p.dataKey === 'pnl') && <p>Kâr: <span className="font-mono">${data.pnl.toFixed(2)}</span></p>}
+
+                {Object.keys(data)
+                    .filter(key => key.includes('(') || key.includes(')'))
+                    .map(key => {
+                        const value = data[key];
+                        if (typeof value === 'number') {
+                            const displayName = key.replace(/_\w+$/, ''); // Remove _MACD, _Signal etc.
+                            return <p key={key}>{displayName}: <span className="font-mono">{value.toFixed(2)}</span></p>;
+                        }
+                        return null;
+                    })}
+
+                {data.tradeMarker && data.tradeMarker.type && (
+                    <p className={`font-bold mt-2 ${data.tradeMarker.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+                        {data.tradeMarker.type.toUpperCase()} @ ${data.tradeMarker.price?.toFixed(2)}
                     </p>
                 )}
             </div>
@@ -415,6 +423,7 @@ export default function StrategyEditorPage() {
 
             if (botToEdit) {
                 setEditingBotId(botToEdit.id);
+                // Use || to provide default values if nodes/edges are not saved with the bot
                 setNodes(botToEdit.nodes || initialNodes);
                 setEdges(botToEdit.edges || initialEdges);
                 setStrategyConfig(botToEdit.config || initialStrategyConfig);
@@ -686,7 +695,7 @@ export default function StrategyEditorPage() {
   }, [backtestResult]);
   
   const indicatorKeys = useMemo(() => {
-    if (!backtestResult || !backtestResult.ohlcData.length) return [];
+    if (!backtestResult || backtestResult.ohlcData.length === 0) return [];
     const firstDataPoint = backtestResult.ohlcData[0];
     return Object.keys(firstDataPoint).filter(key => key.includes('('));
   }, [backtestResult]);
@@ -862,17 +871,17 @@ export default function StrategyEditorPage() {
                                         <YAxis yAxisId="macd" orientation="right" domain={['auto', 'auto']} tickCount={5} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
                                         <Tooltip content={<CustomTooltip />} />
                                         <ReferenceLine yAxisId="macd" y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
-                                        {indicatorKeys.filter(k => k.includes('_Hist')).map((key, index) => (
+                                        {indicatorKeys.filter(k => k.includes('_Hist')).map((key) => (
                                             <Bar key={key} yAxisId="macd" dataKey={key} name="Histogram" >
                                                {chartAndTradeData.map((entry, i) => (
-                                                    <Cell key={`cell-${i}`} fill={entry[key] > 0 ? '#22c55e' : '#ef4444'} />
+                                                    <Cell key={`cell-${i}`} fill={(entry[key] ?? 0) > 0 ? '#22c55e' : '#ef4444'} />
                                                 ))}
                                             </Bar>
                                         ))}
-                                        {indicatorKeys.filter(k => k.includes('_MACD')).map((key, index) => (
+                                        {indicatorKeys.filter(k => k.includes('_MACD')).map((key) => (
                                             <Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="MACD" stroke="#3b82f6" dot={false}/>
                                         ))}
-                                        {indicatorKeys.filter(k => k.includes('_Signal')).map((key, index) => (
+                                        {indicatorKeys.filter(k => k.includes('_Signal')).map((key) => (
                                             <Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="Signal" stroke="#f97316" dot={false}/>
                                         ))}
                                     </ComposedChart>
