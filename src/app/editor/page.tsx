@@ -664,9 +664,9 @@ export default function StrategyEditorPage() {
                             </ResponsiveContainer>
                             <ResponsiveContainer width="100%" height="30%">
                                 <ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}>
-                                    <CartesianGrid stroke="rgba(2_55,255,255,0.1)" strokeDasharray="3 3"/>
+                                    <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
                                     <XAxis dataKey="time" hide={true}/>
-                                    <YAxis yAxisId="indicator" orientation="right" domain={[0, 100]} tickCount={4} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                    <YAxis yAxisId="indicator" orientation="right" domain={['auto', 'auto']} tickCount={4} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
                                     <Tooltip content={<CustomTooltip />} />
                                     {indicatorKeys.map(key => {
                                         if (key.startsWith('RSI')) {
@@ -788,5 +788,3 @@ export default function StrategyEditorPage() {
     </div>
   );
 }
-
-    
