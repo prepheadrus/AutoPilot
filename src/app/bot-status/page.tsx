@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, MouseEvent, useEffect, useMemo, useRef, useCallback } from "react";
@@ -5,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Terminal, Bot, Settings, PlusCircle, Trash2, Eye, X as XIcon, AreaChart as AreaChartIcon, Activity, AlertTriangle, Edit } from "lucide-react";
+import { Play, Pause, Terminal, Bot, Settings, PlusCircle, Trash2, Eye, X as XIcon, AreaChart as AreaChartIcon, Activity, AlertTriangle, Edit, Webhook } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Bot as BotType, Log, BotStatus, BotConfig } from "@/lib/types";
@@ -16,13 +17,14 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Copy } from "lucide-react";
 
 
 const initialBots: BotType[] = [
-    { id: 1, name: "BTC-RSI Stratejisi", pair: "BTC/USDT", status: "Çalışıyor", pnl: 12.5, duration: "2g 5sa", config: { mode: 'PAPER', stopLoss: 2, takeProfit: 5, trailingStop: false, amountType: 'fixed', amount: 100, leverage: 5, initialBalance: 10000, currentBalance: 11250, inPosition: true, entryPrice: 65000, positionSize: 0.1 } },
-    { id: 2, name: "ETH-MACD Scalp", pair: "ETH/USDT", status: "Durduruldu", pnl: -3.2, duration: "12sa 15dk", config: { mode: 'LIVE', stopLoss: 1.5, takeProfit: 3, trailingStop: true, amountType: 'percentage', amount: 10, leverage: 10, initialBalance: 10000 } },
-    { id: 3, name: "SOL-Trend Follow", pair: "SOL/USDT", status: "Çalışıyor", pnl: 8.9, duration: "5g 1sa", config: { mode: 'PAPER', stopLoss: 5, takeProfit: 10, trailingStop: false, amountType: 'fixed', amount: 250, leverage: 3, initialBalance: 10000, currentBalance: 10890, inPosition: false } },
-    { id: 4, name: "AVAX Arbitraj", pair: "AVAX/USDT", status: "Hata", pnl: 0, duration: "1sa", config: { mode: 'LIVE', stopLoss: 3, takeProfit: 6, trailingStop: false, amountType: 'fixed', amount: 50, leverage: 1, initialBalance: 10000 } },
+    { id: 1, name: "BTC-RSI Stratejisi", pair: "BTC/USDT", status: "Çalışıyor", pnl: 12.5, duration: "2g 5sa", config: { mode: 'PAPER', stopLoss: 2, takeProfit: 5, trailingStop: false, amountType: 'fixed', amount: 100, leverage: 5, initialBalance: 10000, currentBalance: 11250, inPosition: true, entryPrice: 65000, positionSize: 0.1 }, webhookSecret: 'd9e1e247-6063-4a32-9a3b-9b4f7e2a4c24' },
+    { id: 2, name: "ETH-MACD Scalp", pair: "ETH/USDT", status: "Durduruldu", pnl: -3.2, duration: "12sa 15dk", config: { mode: 'LIVE', stopLoss: 1.5, takeProfit: 3, trailingStop: true, amountType: 'percentage', amount: 10, leverage: 10, initialBalance: 10000 }, webhookSecret: 'f4b1e6e6-9b0d-4b8a-9f7e-7d6a5c4b3a21' },
+    { id: 3, name: "SOL-Trend Follow", pair: "SOL/USDT", status: "Çalışıyor", pnl: 8.9, duration: "5g 1sa", config: { mode: 'PAPER', stopLoss: 5, takeProfit: 10, trailingStop: false, amountType: 'fixed', amount: 250, leverage: 3, initialBalance: 10000, currentBalance: 10890, inPosition: false }, webhookSecret: 'a1b2c3d4-e5f6-7890-1234-567890abcdef' },
+    { id: 4, name: "AVAX Arbitraj", pair: "AVAX/USDT", status: "Hata", pnl: 0, duration: "1sa", config: { mode: 'LIVE', stopLoss: 3, takeProfit: 6, trailingStop: false, amountType: 'fixed', amount: 50, leverage: 1, initialBalance: 10000 }, webhookSecret: '123e4567-e89b-12d3-a456-426614174000' },
 ];
 
 type LogType = 'info' | 'trade' | 'warning' | 'error';
@@ -130,9 +132,13 @@ export default function BotStatusPage() {
     }, [addLog]);
 
     const runLiveTradeSimulation = useCallback((bot: BotType) => {
-        // This is a placeholder for actual live trade logic
-        // In a real app, this would involve checking exchange for position status, PNL etc.
-        addLog('info', `[${bot.name}] [LIVE] için periyodik durum kontrolü yapılıyor.`);
+        // A webhook-driven bot does not need a polling interval for live trades.
+        // It acts on signals. We can log a heartbeat.
+        if (bot.webhookSecret) {
+             addLog('info', `[${bot.name}] [WEBHOOK] sinyal bekleniyor.`);
+        } else {
+             addLog('info', `[${bot.name}] [LIVE] için periyodik durum kontrolü yapılıyor.`);
+        }
     }, [addLog]);
 
 
@@ -152,6 +158,7 @@ export default function BotStatusPage() {
 
             const botsWithDefaults = loadedBots.map(bot => ({
                 ...bot,
+                webhookSecret: bot.webhookSecret || crypto.randomUUID(), // Ensure every bot has a secret
                 config: {
                     mode: 'PAPER',
                     stopLoss: 2.0,
@@ -181,31 +188,29 @@ export default function BotStatusPage() {
         };
     }, [toast]);
 
-    // Effect to manage simulation intervals
+    // Effect to manage simulation intervals for PAPER bots
     useEffect(() => {
         bots.forEach(bot => {
             const isRunning = bot.status === 'Çalışıyor';
             const intervalExists = intervalRefs.current[bot.id];
 
-            if (isRunning && !intervalExists) {
-                const callback = bot.config.mode === 'PAPER' ? runPaperTradeSimulation : runLiveTradeSimulation;
+            if (isRunning && bot.config.mode === 'PAPER' && !intervalExists) {
                 intervalRefs.current[bot.id] = setInterval(() => {
-                    // Pass the most recent version of the bot to the callback
                     setBots(currentBots => {
                         const currentBot = currentBots.find(b => b.id === bot.id);
                         if (currentBot) {
-                           callback(currentBot);
+                           runPaperTradeSimulation(currentBot);
                         }
-                        return currentBots; // No state change in this setBots, just getting latest bot
+                        return currentBots;
                     });
                 }, 5000 + Math.random() * 2000);
-            } else if (!isRunning && intervalExists) {
+            } else if ((!isRunning || bot.config.mode !== 'PAPER') && intervalExists) {
                 clearInterval(intervalRefs.current[bot.id]);
                 delete intervalRefs.current[bot.id];
             }
         });
          // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [bots.map(b => b.status + b.id).join(',')]); // Rerun only when status or bot list changes
+    }, [bots.map(b => b.status + b.id + b.config.mode).join(',')]);
 
 
     useEffect(() => {
@@ -249,6 +254,7 @@ export default function BotStatusPage() {
                     return { ...bot, status: "Durduruldu" as BotStatus };
                 } else {
                     addLog('info', `"${bot.name}" botu kullanıcı tarafından başlatıldı.`);
+                    addLog('info', `[${bot.name}] [${bot.config.mode}] modu aktif. Strateji motoru sinyal bekliyor.`);
                     return { ...bot, status: "Çalışıyor" as BotStatus };
                 }
             }
@@ -266,6 +272,9 @@ export default function BotStatusPage() {
             }
             setBots(prev => prev.filter(bot => bot.id !== botId));
             addLog('warning', `Bot silindi: "${botToDelete.name}"`);
+            if (selectedBot?.id === botId) {
+                setSelectedBot(null);
+            }
         }
     };
     
@@ -306,20 +315,44 @@ export default function BotStatusPage() {
         }
 
         setBots(prevBots => prevBots.map(bot => 
-            bot.id === selectedBot.id ? { ...bot, config: editedConfig, status: 'Durduruldu' } : bot
+            bot.id === selectedBot.id ? { ...bot, config: editedConfig, status: bot.status === 'Çalışıyor' ? 'Durduruldu' : bot.status } : bot
         ));
 
         toast({
             title: "Ayarlar Güncellendi",
-            description: `"${selectedBot.name}" botunun konfigürasyonu kaydedildi. Güvenlik için bot durduruldu.`,
+            description: `"${selectedBot.name}" botunun konfigürasyonu kaydedildi. Değişikliklerin etkili olması için bot yeniden başlatıldı (gerekliyse).`,
         });
 
-        setSelectedBot(null);
+        // Update the selectedBot state as well to reflect changes immediately in the sheet
+        setSelectedBot(prev => prev ? {...prev, config: editedConfig, status: prev.status === 'Çalışıyor' ? 'Durduruldu' : prev.status } : null);
     }
     
     const botPerformanceData = useMemo(() => {
         if (!selectedBot) return [];
         return generateBotPerformanceData(selectedBot);
+    }, [selectedBot]);
+    
+    const webhookUrl = isClient ? `${window.location.origin}/api/webhook` : '';
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            toast({ title: 'Kopyalandı!', description: 'İçerik panoya kopyalandı.' });
+        }, (err) => {
+            toast({ variant: 'destructive', title: 'Hata', description: 'Kopyalanamadı.' });
+        });
+    };
+    
+    const examplePayload = useMemo(() => {
+        if (!selectedBot) return '';
+        return JSON.stringify({
+            botId: selectedBot.id,
+            secret: selectedBot.webhookSecret,
+            action: "buy", // or "sell"
+            // --- Optional overrides ---
+            // "symbol": "ETH/USDT",
+            // "amount": 250,
+            // "leverage": 10
+        }, null, 2);
     }, [selectedBot]);
 
 
@@ -434,7 +467,7 @@ export default function BotStatusPage() {
 
             {/* Bot Detay Paneli (Sheet) */}
             <Sheet open={!!selectedBot} onOpenChange={(isOpen) => !isOpen && setSelectedBot(null)}>
-                <SheetContent className="w-[400px] sm:w-[540px] bg-slate-900/95 border-slate-800 text-white p-0">
+                <SheetContent className="w-[400px] sm:w-[640px] bg-slate-900/95 border-slate-800 text-white p-0">
                     {selectedBot && (
                         <>
                             <SheetHeader className="p-6 border-b border-slate-800">
@@ -457,9 +490,10 @@ export default function BotStatusPage() {
                                 </div>
                             </SheetHeader>
                             <Tabs defaultValue="overview" className="w-full">
-                                <TabsList className="grid w-full grid-cols-3 bg-slate-900/95 border-b border-slate-800 rounded-none px-6">
+                                <TabsList className="grid w-full grid-cols-4 bg-slate-900/95 border-b border-slate-800 rounded-none px-6">
                                     <TabsTrigger value="overview"><AreaChartIcon className="mr-2 h-4 w-4" />Genel Bakış</TabsTrigger>
                                     <TabsTrigger value="performance"><Activity className="mr-2 h-4 w-4"/>Performans</TabsTrigger>
+                                    <TabsTrigger value="webhook"><Webhook className="mr-2 h-4 w-4"/>Webhook</TabsTrigger>
                                     <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4" />Ayarlar</TabsTrigger>
                                 </TabsList>
                                 <TabsContent value="overview" className="p-6">
@@ -500,19 +534,47 @@ export default function BotStatusPage() {
                                         <Card className="bg-slate-800/50"><CardHeader><CardDescription>Maks. Düşüş</CardDescription><CardTitle className="text-red-400">-8.15%</CardTitle></CardHeader></Card>
                                     </div>
                                 </TabsContent>
+                                <TabsContent value="webhook" className="p-6 text-sm">
+                                    <div className="space-y-6">
+                                        <p className="text-muted-foreground">TradingView uyarılarınızı bu bota bağlamak için aşağıdaki bilgileri kullanın. Bu botun sinyalleri işleme alabilmesi için 'LIVE' modunda ve 'Çalışıyor' durumunda olması gerekir.</p>
+                                        
+                                        <div className="space-y-2">
+                                            <Label>Webhook URL</Label>
+                                            <div className="flex gap-2">
+                                                <Input readOnly value={webhookUrl} className="bg-slate-800 border-slate-700 font-mono text-xs"/>
+                                                <Button variant="outline" size="icon" onClick={() => copyToClipboard(webhookUrl)}><Copy className="h-4 w-4"/></Button>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>Webhook Secret</Label>
+                                            <div className="flex gap-2">
+                                                <Input readOnly value={selectedBot.webhookSecret} className="bg-slate-800 border-slate-700 font-mono text-xs"/>
+                                                 <Button variant="outline" size="icon" onClick={() => copyToClipboard(selectedBot.webhookSecret || '')}><Copy className="h-4 w-4"/></Button>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>Mesaj Gövdesi (Payload)</Label>
+                                            <div className="relative">
+                                                <pre className="bg-slate-800 rounded-md p-4 font-mono text-xs overflow-x-auto">{examplePayload}</pre>
+                                                <Button variant="outline" size="icon" className="absolute top-2 right-2" onClick={() => copyToClipboard(examplePayload)}><Copy className="h-4 w-4"/></Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </TabsContent>
                                 <TabsContent value="settings" className="p-6">
                                     {editedConfig ? (
                                         <div className="space-y-6">
                                              <div>
                                                 <h4 className="font-semibold mb-3">İşlem Modu</h4>
-                                                <Select value={editedConfig.mode} onValueChange={(value: 'LIVE' | 'PAPER') => handleConfigChange('mode', value)} disabled={selectedBot.status === 'Çalışıyor'}>
+                                                <Select value={editedConfig.mode} onValueChange={(value: 'LIVE' | 'PAPER') => handleConfigChange('mode', value)}>
                                                     <SelectTrigger className="bg-slate-800 border-slate-700"><SelectValue /></SelectTrigger>
                                                     <SelectContent className="bg-slate-800 border-slate-600 text-white">
                                                         <SelectItem value="PAPER">Paper (Sanal Bakiye)</SelectItem>
                                                         <SelectItem value="LIVE">Live (Gerçek Bakiye)</SelectItem>
                                                     </SelectContent>
                                                 </Select>
-                                                 {selectedBot.status === 'Çalışıyor' && <p className="text-xs text-muted-foreground mt-2">Bot çalışırken işlem modu değiştirilemez.</p>}
                                             </div>
                                             <div>
                                                 <h4 className="font-semibold mb-3">Risk Yönetimi</h4>

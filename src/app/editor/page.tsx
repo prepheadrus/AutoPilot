@@ -625,6 +625,7 @@ export default function StrategyEditorPage() {
               config: strategyConfig,
               nodes: nodes,
               edges: edges,
+              webhookSecret: crypto.randomUUID(),
             };
             bots.push(newBot);
              toast({
@@ -996,7 +997,3 @@ export default function StrategyEditorPage() {
     </div>
   );
 }
-
-    
-
-    

@@ -1,3 +1,4 @@
+
 import type { Node, Edge } from '@xyflow/react';
 
 export type BotStatus = "Çalışıyor" | "Durduruldu" | "Hata";
@@ -28,6 +29,7 @@ export type Bot = {
     config: BotConfig;
     nodes?: Node[];
     edges?: Edge[];
+    webhookSecret?: string; // Unique secret for validating webhook calls
 };
 
 export type Log = {
