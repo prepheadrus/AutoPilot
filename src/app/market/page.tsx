@@ -22,19 +22,20 @@ declare global {
 const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const widgetId = useId();
-    const container_id = `tradingview_widget_${symbol}_${widgetId}`;
+    const container_id = `tradingview_widget_${symbol.replace('/', '')}_${widgetId}`;
 
     useEffect(() => {
         let tvWidget: any = null;
 
-        // Clean up the symbol to be compatible with TradingView (e.g., "BTC/USDT" -> "BTCUSDT")
-        const formattedSymbol = symbol.replace('/', '');
+        // Clean up the symbol to be compatible with TradingView 
+        // (e.g., "BTC/USDT" -> "BINANCE:BTCUSDT")
+        const formattedSymbol = symbol.toUpperCase().replace('/USDT', '').replace('/', '');
 
         const createWidget = () => {
             if (document.getElementById(container_id) && typeof window.TradingView !== 'undefined') {
                 tvWidget = new window.TradingView.widget({
                     autosize: true,
-                    symbol: `BINANCE:${formattedSymbol}`,
+                    symbol: `BINANCE:${formattedSymbol}USDT`, // Always append USDT for consistency
                     interval: "D",
                     timezone: "Etc/UTC",
                     theme: "dark",
@@ -201,10 +202,10 @@ export default function MarketTerminalPage() {
     const symbolFromUrl = searchParams.get('symbol');
     if (symbolFromUrl && marketData.some(c => c.symbol === symbolFromUrl)) {
       setSelectedSymbol(symbolFromUrl);
-    } else if (marketData.length > 0) {
+    } else if (marketData.length > 0 && !marketData.some(c => c.symbol === selectedSymbol)) {
       setSelectedSymbol(marketData[0].symbol);
     }
-  }, [searchParams, marketData]);
+  }, [searchParams, marketData, selectedSymbol]);
 
   const handleSelectSymbol = (symbol: string) => {
     setSelectedSymbol(symbol);
