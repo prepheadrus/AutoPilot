@@ -229,12 +229,11 @@ export default function MarketTerminalPage() {
       );
     }
     
-    // If search is empty, show only favorites
-    return marketData.filter(coin => favorites.includes(coin.symbol));
-    
-  }, [searchQuery, marketData, favorites]);
+    // If search is empty, show all coins (favorites can be highlighted with star icon)
+    return marketData;
+  }, [searchQuery, marketData]);
 
-  const listTitle = searchQuery ? "Arama Sonuçları" : "Favoriler";
+  const listTitle = searchQuery ? "Arama Sonuçları" : "Tüm Piyasalar";
 
   return (
     <div className="flex-1 flex flex-row overflow-hidden rounded-lg bg-slate-950 border border-slate-800">
@@ -298,6 +297,3 @@ export default function MarketTerminalPage() {
     </div>
   );
 }
-
-
-    
