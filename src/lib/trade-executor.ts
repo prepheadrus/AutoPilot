@@ -14,18 +14,25 @@ type TradeResult = {
     error?: string;
 };
 
+// Detect environment: Use proxy on server (Cloud Run), direct connection locally.
+const isLocal = process.env.NODE_ENV === 'development';
+
 /**
  * Creates an authenticated CCXT exchange instance.
  * Keys are passed directly, simulating in-memory decryption from a secure vault.
  */
 function createExchange(keys: ApiKeys, defaultType: 'spot' | 'future' = 'future'): Exchange {
-    const exchange = new (ccxt as any).binance({
+    const exchangeConfig = {
         apiKey: keys.apiKey,
         secret: keys.secretKey,
         options: {
             defaultType,
         },
-    });
+        // Conditionally add proxy if on server and PROXY_URL is set
+        ...(!isLocal && process.env.PROXY_URL ? { 'https': process.env.PROXY_URL, 'http': process.env.PROXY_URL, 'httpsProxy': process.env.PROXY_URL, 'httpProxy': process.env.PROXY_URL } : {})
+    };
+
+    const exchange = new (ccxt as any).binance(exchangeConfig);
     return exchange;
 }
 

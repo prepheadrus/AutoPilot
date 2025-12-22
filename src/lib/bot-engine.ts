@@ -28,6 +28,9 @@ type ApiKeys = {
     secret: string;
 }
 
+// Detect environment: Use proxy on server (Cloud Run), direct connection locally.
+const isLocal = process.env.NODE_ENV === 'development';
+
 /**
  * Runs a given strategy with live data and returns a trading decision.
  * @param strategy The compiled strategy object from the editor.
@@ -38,13 +41,18 @@ type ApiKeys = {
 export async function runStrategy(strategy: Strategy, symbol: string = 'BTC/USDT', keys: ApiKeys): Promise<EngineResult> {
     try {
         const exchangeId = 'binance'; // Hardcoded for now
-        const exchange = new (ccxt as any)[exchangeId]({
+        
+        const exchangeConfig = {
             apiKey: keys.apiKey,
             secret: keys.secret,
             options: {
                 defaultType: 'future',
-            }
-        });
+            },
+            // Conditionally add proxy if on server and PROXY_URL is set
+            ...(!isLocal && process.env.PROXY_URL ? { 'https': process.env.PROXY_URL, 'http': process.env.PROXY_URL, 'httpsProxy': process.env.PROXY_URL, 'httpProxy': process.env.PROXY_URL } : {})
+        };
+
+        const exchange = new (ccxt as any)[exchangeId](exchangeConfig);
 
         // 1. Fetch Data
         const ohlcv = await fetchOHLCV(exchange, symbol, '1h');

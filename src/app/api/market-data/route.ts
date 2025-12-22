@@ -21,6 +21,9 @@ let cachedTickers: any = null;
 let tickersLastFetchTime: number = 0;
 const TICKERS_CACHE_DURATION = 5000; // 5 seconds
 
+// Detect environment: Use proxy on server (Cloud Run), direct connection locally.
+const isLocal = process.env.NODE_ENV === 'development';
+
 async function getMarkets(exchange: ccxt.Exchange) {
     const now = Date.now();
     if (cachedMarkets.length > 0 && (now - marketsLastFetchTime < MARKETS_CACHE_DURATION)) {
@@ -47,7 +50,12 @@ export async function GET() {
     }
 
     try {
-        const exchange = new ccxt.binance();
+        const exchangeConfig = {
+            // Conditionally add proxy if on server and PROXY_URL is set
+            ...(!isLocal && process.env.PROXY_URL ? { 'https': process.env.PROXY_URL, 'http': process.env.PROXY_URL, 'httpsProxy': process.env.PROXY_URL, 'httpProxy': process.env.PROXY_URL } : {})
+        };
+        const exchange = new ccxt.binance(exchangeConfig);
+
         const allUsdtSymbols = await getMarkets(exchange);
         
         // Fetch tickers in chunks to avoid hitting API rate limits

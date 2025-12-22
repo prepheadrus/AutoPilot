@@ -2,6 +2,9 @@ import ccxt, { Exchange } from 'ccxt';
 
 // This is a server-side module. Do not import in client components.
 
+// Detect environment: Use proxy on server (Cloud Run), direct connection locally.
+const isLocal = process.env.NODE_ENV === 'development';
+
 /**
  * Returns a list of all supported exchanges.
  * @returns An array of exchange IDs.
@@ -77,13 +80,18 @@ export async function validateApiKeys(exchangeId: string, apiKey: string, secret
     
     try {
         const exchangeClass = (ccxt as any)[exchangeId];
-        const exchange = new exchangeClass({
+
+        const exchangeConfig = {
             apiKey,
             secret,
             options: {
                 defaultType: 'future', // Or 'spot' depending on what you want to test
             },
-        });
+            // Conditionally add proxy if on server and PROXY_URL is set
+            ...(!isLocal && process.env.PROXY_URL ? { 'https': process.env.PROXY_URL, 'http': process.env.PROXY_URL, 'httpsProxy': process.env.PROXY_URL, 'httpProxy': process.env.PROXY_URL } : {})
+        };
+
+        const exchange = new exchangeClass(exchangeConfig);
         
         // Fetching balance is a common way to test private API endpoint access.
         await exchange.fetchBalance();
