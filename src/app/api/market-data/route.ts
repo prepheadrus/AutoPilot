@@ -33,15 +33,12 @@ const POPULAR_SYMBOLS = [
     "ARB", "OP", "INJ", "RNDR", "TIA", "SUI", "APT", "HBAR", "VET", "FIL"
 ];
 
-// Fallback data in case the live API fails
+// Fallback data in case the live API fails, as requested for debugging.
 const getFallbackData = (): FormattedTicker[] => [
     { symbol: 'BTC', name: 'Bitcoin', price: 65000 + (Math.random() - 0.5) * 1000, change: (Math.random() - 0.5) * 5 },
     { symbol: 'ETH', name: 'Ethereum', price: 3500 + (Math.random() - 0.5) * 200, change: (Math.random() - 0.5) * 5 },
     { symbol: 'SOL', name: 'Solana', price: 150 + (Math.random() - 0.5) * 20, change: (Math.random() - 0.5) * 5 },
     { symbol: 'ARB', name: 'Arbitrum', price: 0.85 + (Math.random() - 0.5) * 0.1, change: (Math.random() - 0.5) * 5 },
-    { symbol: 'BNB', name: 'BNB', price: 580 + (Math.random() - 0.5) * 30, change: (Math.random() - 0.5) * 5 },
-    { symbol: 'XRP', name: 'XRP', price: 0.48 + (Math.random() - 0.5) * 0.05, change: (Math.random() - 0.5) * 5 },
-    { symbol: 'ADA', name: 'Cardano', price: 0.40 + (Math.random() - 0.5) * 0.04, change: (Math.random() - 0.5) * 5 },
 ];
 
 
@@ -85,6 +82,7 @@ export async function GET() {
             },
         });
         
+        // RAW DATA LOGGING as requested for debug report
         console.log("RAW_API_RESPONSE:", JSON.stringify(response.data, null, 2));
 
         const quotes: Record<string, CmcQuote> = response.data.data;
@@ -97,7 +95,7 @@ export async function GET() {
             change: quote.quote.USD.percent_change_24h,
         }));
         
-        console.log(`[Market-Data] Successfully fetched ${formattedTickers.length} tickers from CMC.`);
+        console.log(`[Market-Data] Successfully fetched and mapped ${formattedTickers.length} tickers from CMC.`);
         
         // 5. Update cache with live data
         cachedData = {
@@ -116,9 +114,8 @@ export async function GET() {
         
         console.warn('[Market-Data] Failed to fetch live data. Engaging fallback mechanism.');
         const fallbackTickers = getFallbackData();
-        cachedData = { tickers: fallbackTickers, timestamp: now, source: 'static' };
+        // Do not cache fallback data to allow for retries
+        // cachedData = { tickers: fallbackTickers, timestamp: now, source: 'static' };
         return NextResponse.json({ tickers: fallbackTickers, source: 'static' });
     }
 }
-
-    
