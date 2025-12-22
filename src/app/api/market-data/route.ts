@@ -84,6 +84,8 @@ export async function GET() {
                 convert: 'USD',
             },
         });
+        
+        console.log("RAW_API_RESPONSE:", JSON.stringify(response.data, null, 2));
 
         const quotes: Record<string, CmcQuote> = response.data.data;
         

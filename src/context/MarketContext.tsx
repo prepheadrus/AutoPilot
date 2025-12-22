@@ -37,11 +37,11 @@ export const MarketProvider = ({ children }: { children: ReactNode }) => {
       try {
         const response = await fetch('/api/market-data');
         if (!response.ok) {
-          throw new Error('API request failed');
+          throw new Error(`API request failed with status ${response.status}`);
         }
         const data = await response.json();
         if (data && data.tickers) {
-          console.log(`[MarketContext] Initial data loaded. Source: ${data.source}`);
+          console.log(`[MarketContext] Initial data loaded. Source: ${data.source}, Count: ${data.tickers.length}`);
           setMarketData(data.tickers);
           setSource(data.source);
         } else {
@@ -66,10 +66,14 @@ export const MarketProvider = ({ children }: { children: ReactNode }) => {
 
     const intervalId = setInterval(async () => {
       try {
-        // Fetch fresh data from the API endpoint
         const response = await fetch('/api/market-data');
-        const data = await response.json();
+        if (!response.ok) {
+          // Don't throw, just log and wait for the next interval
+          console.warn(`[MarketContext] Interval fetch failed with status ${response.status}. Will retry.`);
+          return;
+        }
         
+        const data = await response.json();
         if (data && data.tickers) {
            setMarketData(data.tickers);
            setSource(data.source);
