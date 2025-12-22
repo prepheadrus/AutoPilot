@@ -22,7 +22,7 @@ type FormattedTicker = {
 };
 
 // In-memory cache for tickers
-let cachedData: { tickers: FormattedTicker[], timestamp: number } | null = null;
+let cachedData: { tickers: FormattedTicker[], timestamp: number, source: 'live' | 'static' } | null = null;
 const CACHE_DURATION = 60000; // 60 seconds
 
 // Hardcoded list of popular cryptocurrency symbols for the API call
@@ -32,30 +32,42 @@ const POPULAR_SYMBOLS = [
     "ARB", "OP", "INJ", "RNDR", "TIA", "SUI", "APT", "HBAR", "VET", "FIL"
 ];
 
+// Fallback data in case the live API fails
+const getFallbackData = (): FormattedTicker[] => [
+    { symbol: 'BTC', name: 'Bitcoin', price: 65000 + (Math.random() - 0.5) * 1000, change: (Math.random() - 0.5) * 5 },
+    { symbol: 'ETH', name: 'Ethereum', price: 3500 + (Math.random() - 0.5) * 200, change: (Math.random() - 0.5) * 5 },
+    { symbol: 'SOL', name: 'Solana', price: 150 + (Math.random() - 0.5) * 20, change: (Math.random() - 0.5) * 5 },
+    { symbol: 'ARB', name: 'Arbitrum', price: 0.85 + (Math.random() - 0.5) * 0.1, change: (Math.random() - 0.5) * 5 },
+    { symbol: 'BNB', name: 'BNB', price: 580 + (Math.random() - 0.5) * 30, change: (Math.random() - 0.5) * 5 },
+    { symbol: 'XRP', name: 'XRP', price: 0.48 + (Math.random() - 0.5) * 0.05, change: (Math.random() - 0.5) * 5 },
+    { symbol: 'ADA', name: 'Cardano', price: 0.40 + (Math.random() - 0.5) * 0.04, change: (Math.random() - 0.5) * 5 },
+];
+
+
 /**
  * Fetches the latest cryptocurrency data from CoinMarketCap API.
  * Uses an in-memory cache to avoid hitting API rate limits.
+ * Provides a static fallback if the API is unavailable.
  */
 export async function GET() {
     const now = Date.now();
     
     // 1. Serve from cache if data is fresh
     if (cachedData && (now - cachedData.timestamp < CACHE_DURATION)) {
-        console.log('[Market-Data] Veri önbellekten sunuluyor.');
+        console.log(`[Market-Data] Veri önbellekten sunuluyor. Kaynak: ${cachedData.source}`);
         return NextResponse.json({
             tickers: cachedData.tickers,
-            source: 'live (cached)',
+            source: cachedData.source,
         });
     }
 
     // 2. Check for API Key
     const apiKey = process.env.CMC_PRO_API_KEY;
     if (!apiKey) {
-        console.error('[Market-Data] CoinMarketCap API anahtarı (CMC_PRO_API_KEY) bulunamadı.');
-        return NextResponse.json(
-            { success: false, message: 'Sunucu, piyasa verilerini alacak şekilde yapılandırılmamış.' },
-            { status: 500 }
-        );
+        console.warn('[Market-Data] CoinMarketCap API anahtarı (CMC_PRO_API_KEY) bulunamadı. Yedek veri kullanılıyor.');
+        const fallbackTickers = getFallbackData();
+        cachedData = { tickers: fallbackTickers, timestamp: now, source: 'static' };
+        return NextResponse.json({ tickers: fallbackTickers, source: 'static' });
     }
     
     // 3. Fetch from CoinMarketCap API
@@ -84,10 +96,11 @@ export async function GET() {
         
         console.log(`[Market-Data] CMC'den ${formattedTickers.length} adet coin verisi başarıyla alındı.`);
         
-        // 5. Update cache
+        // 5. Update cache with live data
         cachedData = {
             tickers: formattedTickers,
             timestamp: now,
+            source: 'live',
         };
 
         return NextResponse.json({
@@ -98,14 +111,9 @@ export async function GET() {
     } catch (error: any) {
         console.error('[Market-Data] CoinMarketCap API\'sinden veri alınırken hata oluştu:', error.response?.data || error.message);
         
-        // Return an error response
-        return NextResponse.json(
-            { 
-                success: false, 
-                message: 'Piyasa verileri alınamadı. Lütfen daha sonra tekrar deneyin.',
-                error: error.response?.data?.status?.error_message || error.message,
-            },
-            { status: 500 }
-        );
+        console.warn('[Market-Data] Canlı veri alınamadı. Yedek veri mekanizması devreye sokuluyor.');
+        const fallbackTickers = getFallbackData();
+        cachedData = { tickers: fallbackTickers, timestamp: now, source: 'static' };
+        return NextResponse.json({ tickers: fallbackTickers, source: 'static' });
     }
 }
