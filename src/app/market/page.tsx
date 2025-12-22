@@ -62,7 +62,7 @@ const TradingViewWidget = memo(({ symbol, exchange }: { symbol: string; exchange
                     enable_publishing: false,
                     withdateranges: true,
                     hide_side_toolbar: false,
-                    allow_symbol_change: false, // We control the symbol from our UI
+                    allow_symbol_change: false,
                     container_id: container_id
                 });
             }
@@ -80,16 +80,14 @@ const TradingViewWidget = memo(({ symbol, exchange }: { symbol: string; exchange
             script.onload = createWidget;
             document.body.appendChild(script);
         } else {
-            // If script exists, ensure widget is created. If widget already exists, it will handle itself.
             if(window.TradingView) {
                createWidget();
             }
         }
-        
+
         return () => {
              const widgetContainer = document.getElementById(container_id);
              if (widgetContainer) {
-                 // Clear the container to ensure the old widget is removed
                  widgetContainer.innerHTML = '';
              }
         };
