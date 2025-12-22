@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, ArrowRight, Star, Heart, WifiOff, Activity } from "lucide-react";
+import { Search, ArrowRight, Star, Heart, WifiOff, Activity, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from '@/components/ui/skeleton';
 
