@@ -27,11 +27,14 @@ const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
     useEffect(() => {
         let tvWidget: any = null;
 
+        // Clean up the symbol to be compatible with TradingView (e.g., "BTC/USDT" -> "BTCUSDT")
+        const formattedSymbol = symbol.replace('/', '');
+
         const createWidget = () => {
             if (document.getElementById(container_id) && typeof window.TradingView !== 'undefined') {
                 tvWidget = new window.TradingView.widget({
                     autosize: true,
-                    symbol: `BINANCE:${symbol.toUpperCase()}USDT`,
+                    symbol: `BINANCE:${formattedSymbol}USDT`,
                     interval: "D",
                     timezone: "Etc/UTC",
                     theme: "dark",
