@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, memo, useId, useCallback, useMemo } from 'react';
@@ -6,7 +7,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, ArrowRight, Star, Heart, WifiOff } from "lucide-react";
+import { Search, ArrowRight, Star, Heart, WifiOff, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -91,15 +92,14 @@ const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
 TradingViewWidget.displayName = 'TradingViewWidget';
 
 // Memoized MarketList for performance
-const MarketList = memo(({ coins, favorites, selectedSymbol, onSelectSymbol, onToggleFavorite, isLoading, searchQuery, hasData }: { 
+const MarketList = memo(({ coins, favorites, selectedSymbol, onSelectSymbol, onToggleFavorite, isLoading, searchQuery }: { 
     coins: MarketCoin[], 
     favorites: string[],
     selectedSymbol: string,
     onSelectSymbol: (symbol: string) => void,
     onToggleFavorite: (e: React.MouseEvent, symbol: string) => void,
     isLoading: boolean,
-    searchQuery: string,
-    hasData: boolean,
+    searchQuery: string
 }) => {
     if (isLoading) {
       return (
@@ -121,21 +121,11 @@ const MarketList = memo(({ coins, favorites, selectedSymbol, onSelectSymbol, onT
     }
     
     if (coins.length === 0) {
-        // No data from API at all
-        if (!hasData) {
-            return (
-                <div className="text-center text-muted-foreground p-8 flex flex-col items-center gap-2">
-                    <WifiOff className="h-8 w-8 text-destructive"/>
-                    <p className='font-semibold text-foreground'>Veri Alınamadı</p>
-                    <p className="text-xs">Piyasa verileri sunucusuna ulaşılamıyor. Lütfen daha sonra tekrar deneyin.</p>
-                </div>
-            );
-        }
-        // Has data, but search returned no results
+        // Search returned no results
         if(searchQuery) {
             return <p className="text-center text-muted-foreground p-8">"{searchQuery}" için sonuç bulunamadı.</p>
         }
-        // Has data, search is empty, but no favorites
+        // No search, but no favorites to display
         return (
             <div className="text-center text-muted-foreground p-8 flex flex-col items-center gap-2">
                 <Heart className="h-6 w-6"/>
@@ -191,6 +181,7 @@ export default function MarketTerminalPage() {
   const [marketData, setMarketData] = useState<MarketCoin[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [isSimulatedData, setIsSimulatedData] = useState(false);
   
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -224,6 +215,11 @@ export default function MarketTerminalPage() {
   }, [searchParams]);
 
   const fetchMarketData = useCallback(async () => {
+      // Don't refetch if simulation is active
+      if (isSimulatedData) {
+          setIsLoading(false);
+          return;
+      }
       try {
           console.log("[Market-Data-Client] Veri çekiliyor...");
           const response = await fetch('/api/market-data');
@@ -232,24 +228,54 @@ export default function MarketTerminalPage() {
           }
           const data = await response.json();
           if (data && data.tickers) {
-             console.log(`[Market-Data-Client] Alınan coin sayısı: ${data.tickers.length}`);
+             console.log(`[Market-Data-Client] Alınan coin sayısı: ${data.tickers.length}. Kaynak: ${data.source}`);
              setMarketData(data.tickers);
+             setIsSimulatedData(data.source === 'static');
           } else {
              setMarketData([]);
+             setIsSimulatedData(true); // Fallback to simulation
           }
       } catch (error) {
           console.error(error);
           setMarketData([]); // Set to empty on error
+          setIsSimulatedData(true);
       } finally {
           setIsLoading(false);
       }
-  }, []);
+  }, [isSimulatedData]);
 
   useEffect(() => {
       fetchMarketData(); // Initial fetch
-      const interval = setInterval(fetchMarketData, 5000); // Fetch every 5 seconds
-      return () => clearInterval(interval);
-  }, [fetchMarketData]);
+      
+      const liveDataInterval = setInterval(() => {
+          if (!isSimulatedData) {
+            fetchMarketData();
+          }
+      }, 5000);
+
+      return () => clearInterval(liveDataInterval);
+  }, [fetchMarketData, isSimulatedData]);
+  
+  // Effect for price simulation when using fallback data
+  useEffect(() => {
+    if (!isSimulatedData) return;
+
+    const simulationInterval = setInterval(() => {
+        setMarketData(prevData =>
+            prevData.map(coin => {
+                const priceJitter = (Math.random() - 0.5) * (coin.price * 0.001); // +/- 0.05%
+                const changeJitter = (Math.random() - 0.5) * 0.1;
+                return {
+                    ...coin,
+                    price: Math.max(0, coin.price + priceJitter),
+                    change: coin.change + changeJitter,
+                };
+            })
+        );
+    }, 3000); // Update every 3 seconds
+
+    return () => clearInterval(simulationInterval);
+  }, [isSimulatedData]);
 
 
   const handleSelectSymbol = (symbol: string) => {
@@ -315,7 +341,6 @@ export default function MarketTerminalPage() {
                         onToggleFavorite={toggleFavorite}
                         isLoading={isLoading}
                         searchQuery={searchQuery}
-                        hasData={marketData.length > 0}
                     />
                 </div>
             </div>
@@ -324,7 +349,15 @@ export default function MarketTerminalPage() {
         {/* Right Panel: Chart and Actions */}
         <main className="flex-1 flex flex-col">
             <div className="flex h-16 items-center justify-between p-4 border-b border-slate-800 shrink-0">
-                <h1 className="text-xl font-headline font-bold text-white">{selectedSymbol}/USDT</h1>
+                <div className="flex items-center gap-4">
+                     <h1 className="text-xl font-headline font-bold text-white">{selectedSymbol}/USDT</h1>
+                     {isSimulatedData && (
+                        <div className="flex items-center gap-2 text-xs text-amber-400 animate-pulse">
+                            <Activity className="h-4 w-4" />
+                            <span>Simülasyon Modu</span>
+                        </div>
+                     )}
+                </div>
                 <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
                     <Link href={`/editor?symbol=${selectedSymbol}USDT`}>
                         Bu Varlıkla Bot Oluştur <ArrowRight className="ml-2 h-4 w-4"/>
@@ -338,3 +371,4 @@ export default function MarketTerminalPage() {
     </div>
   );
 }
+
