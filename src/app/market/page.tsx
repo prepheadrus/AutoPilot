@@ -34,7 +34,7 @@ const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
             if (document.getElementById(container_id) && typeof window.TradingView !== 'undefined') {
                 tvWidget = new window.TradingView.widget({
                     autosize: true,
-                    symbol: `BINANCE:${formattedSymbol}USDT`,
+                    symbol: `BINANCE:${formattedSymbol}`,
                     interval: "D",
                     timezone: "Etc/UTC",
                     theme: "dark",
@@ -61,21 +61,18 @@ const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
             script.onload = createWidget;
             document.body.appendChild(script);
         } else {
-            createWidget();
+            // If script exists, ensure widget is created. If widget already exists, it will handle itself.
+            if(window.TradingView) {
+               createWidget();
+            }
         }
-
+        
         return () => {
              const widgetContainer = document.getElementById(container_id);
              if (widgetContainer) {
-                const iframe = widgetContainer.querySelector('iframe');
-                if (iframe && iframe.parentNode) {
-                   try {
-                     iframe.parentNode.removeChild(iframe);
-                   } catch (error) {
-                       console.error("Error cleaning up TradingView widget:", error);
-                   }
-                }
-            }
+                 // Clear the container to ensure the old widget is removed
+                 widgetContainer.innerHTML = '';
+             }
         };
     }, [symbol, container_id]);
 
@@ -123,9 +120,9 @@ const MarketList = memo(({ coins, favorites, selectedSymbol, onSelectSymbol, onT
         }
         return (
             <div className="text-center text-muted-foreground p-8 flex flex-col items-center gap-2">
-                <Heart className="h-6 w-6"/>
-                <p>Henüz favoriniz yok.</p>
-                <p className="text-xs">Bir varlığı favorilere eklemek için arama yapın ve yıldız ikonuna tıklayın.</p>
+                <WifiOff className="h-6 w-6"/>
+                <p>Veri Yüklenemedi</p>
+                <p className="text-xs">Piyasa verileri alınamadı. Lütfen daha sonra tekrar deneyin.</p>
             </div>
         )
     }
@@ -171,10 +168,10 @@ MarketList.displayName = 'MarketList';
 
 
 export default function MarketTerminalPage() {
-  const [selectedSymbol, setSelectedSymbol] = useState("BTC");
+  const [selectedSymbol, setSelectedSymbol] = useState("BTC/USDT");
   const [searchQuery, setSearchQuery] = useState("");
   const [favorites, setFavorites] = useState<string[]>([]);
-  const { marketData, isLoading, source } = useContext(MarketContext);
+  const { marketData, isLoading, source, error } = useContext(MarketContext);
   
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -202,10 +199,12 @@ export default function MarketTerminalPage() {
 
   useEffect(() => {
     const symbolFromUrl = searchParams.get('symbol');
-    if (symbolFromUrl) {
-      setSelectedSymbol(symbolFromUrl.replace('USDT', ''));
+    if (symbolFromUrl && marketData.some(c => c.symbol === symbolFromUrl)) {
+      setSelectedSymbol(symbolFromUrl);
+    } else if (marketData.length > 0) {
+      setSelectedSymbol(marketData[0].symbol);
     }
-  }, [searchParams]);
+  }, [searchParams, marketData]);
 
   const handleSelectSymbol = (symbol: string) => {
     setSelectedSymbol(symbol);
@@ -222,17 +221,15 @@ export default function MarketTerminalPage() {
   }
   
   const filteredCoins = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.toLowerCase().replace('/', '');
     
-    // If there's a search query, filter all market data
     if (query) {
       return marketData.filter(coin => 
-        coin.symbol.toLowerCase().includes(query) || 
+        coin.symbol.toLowerCase().replace('/', '').includes(query) || 
         coin.name.toLowerCase().includes(query)
       );
     }
     
-    // If search is empty, show all coins (favorites can be highlighted with star icon)
     return marketData;
   }, [searchQuery, marketData]);
 
@@ -279,16 +276,22 @@ export default function MarketTerminalPage() {
         <main className="flex-1 flex flex-col">
             <div className="flex h-16 items-center justify-between p-4 border-b border-slate-800 shrink-0">
                 <div className="flex items-center gap-4">
-                     <h1 className="text-xl font-headline font-bold text-white">{selectedSymbol}/USDT</h1>
-                     {source === 'static' && (
-                        <div className="flex items-center gap-2 text-xs text-amber-400 animate-pulse">
+                     <h1 className="text-xl font-headline font-bold text-white">{selectedSymbol}</h1>
+                     {source === 'static' && !isLoading && (
+                        <div className="flex items-center gap-2 text-xs text-amber-400">
                             <Activity className="h-4 w-4" />
                             <span>Simülasyon Modu</span>
                         </div>
                      )}
+                     {error && (
+                         <div className="flex items-center gap-2 text-xs text-red-400">
+                            <WifiOff className="h-4 w-4" />
+                            <span>{error}</span>
+                        </div>
+                     )}
                 </div>
                 <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                    <Link href={`/editor?symbol=${selectedSymbol}USDT`}>
+                    <Link href={`/editor?symbol=${selectedSymbol}`}>
                         Bu Varlıkla Bot Oluştur <ArrowRight className="ml-2 h-4 w-4"/>
                     </Link>
                 </Button>

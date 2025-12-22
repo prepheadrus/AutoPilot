@@ -34,11 +34,14 @@ export const MarketProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const fetchMarketData = async () => {
       console.log("[MarketContext] Fetching initial market data...");
+      setIsLoading(true);
       try {
         const response = await fetch('/api/market-data');
+        
         if (!response.ok) {
           throw new Error(`API request failed with status ${response.status}`);
         }
+        
         const data = await response.json();
 
         // --- STEP 2: Log the raw data received by the client ---
@@ -49,6 +52,7 @@ export const MarketProvider = ({ children }: { children: ReactNode }) => {
           console.log(`[MarketContext] Data is valid. Source: ${data.source}, Count: ${data.tickers.length}`);
           setMarketData(data.tickers);
           setSource(data.source);
+          setError(null);
         } else {
           console.error("[MarketContext] Invalid data structure received:", data);
           throw new Error('Invalid or missing "tickers" array in API response.');
@@ -57,6 +61,7 @@ export const MarketProvider = ({ children }: { children: ReactNode }) => {
         console.error("[MarketContext] Error fetching or processing data:", e.message);
         setError(e.message);
         setSource('static'); 
+        setMarketData([]); // Clear data on error
       } finally {
         setIsLoading(false);
       }
