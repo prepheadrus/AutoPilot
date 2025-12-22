@@ -90,6 +90,87 @@ const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
 
 TradingViewWidget.displayName = 'TradingViewWidget';
 
+// Memoized MarketList for performance
+const MarketList = memo(({ coins, favorites, selectedSymbol, onSelectSymbol, onToggleFavorite, isLoading, searchQuery }: { 
+    coins: MarketCoin[], 
+    favorites: string[],
+    selectedSymbol: string,
+    onSelectSymbol: (symbol: string) => void,
+    onToggleFavorite: (e: React.MouseEvent, symbol: string) => void,
+    isLoading: boolean,
+    searchQuery: string,
+}) => {
+    if (isLoading && coins.length === 0) {
+      return (
+        <div className="p-2 space-y-2">
+            {Array.from({ length: 15 }).map((_, i) => (
+                <div key={i} className="grid grid-cols-[auto,1fr,1fr] gap-4 items-center p-1">
+                    <Skeleton className="h-5 w-5 rounded-full" />
+                    <div className='w-full'>
+                        <Skeleton className="h-5 w-16" />
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                        <Skeleton className="h-5 w-24 justify-self-end" />
+                        <Skeleton className="h-3 w-10 justify-self-end" />
+                    </div>
+                </div>
+            ))}
+        </div>
+      );
+    }
+    
+    if (coins.length === 0) {
+        if(searchQuery) {
+            return <p className="text-center text-muted-foreground p-8">"{searchQuery}" için sonuç bulunamadı.</p>
+        }
+        return (
+            <div className="text-center text-muted-foreground p-8 flex flex-col items-center gap-2">
+                <Heart className="h-6 w-6"/>
+                <p>Henüz favoriniz yok.</p>
+                <p className="text-xs">Bir varlığı favorilere eklemek için arama yapın ve yıldız ikonuna tıklayın.</p>
+            </div>
+        )
+    }
+
+    return (
+        <ul>
+            {coins.map((coin) => (
+                <li key={coin.symbol}>
+                    <button 
+                        className={cn(
+                            "w-full p-2 grid grid-cols-[auto,1fr,1fr] gap-4 items-center text-sm text-left hover:bg-slate-800/50 rounded-md transition-colors",
+                            selectedSymbol === coin.symbol && "bg-primary/10 text-primary"
+                        )}
+                        onClick={() => onSelectSymbol(coin.symbol)}
+                    >
+                        <Star 
+                            className={cn(
+                                "h-4 w-4 text-muted-foreground/50 hover:text-yellow-400 transition-colors",
+                                favorites.includes(coin.symbol) && "text-yellow-400 fill-yellow-400"
+                            )}
+                            onClick={(e) => onToggleFavorite(e, coin.symbol)}
+                        />
+                        <div className="flex flex-col">
+                           <span className="font-bold">{coin.symbol}</span>
+                           <span className="text-xs text-muted-foreground">{coin.name}</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                            <span className="font-mono">${coin.price < 0.01 ? coin.price.toPrecision(2) : coin.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className={cn(
+                                "font-mono text-xs",
+                                coin.change >= 0 ? "text-green-500" : "text-red-500"
+                            )}>
+                                {coin.change.toFixed(2)}%
+                            </span>
+                        </div>
+                    </button>
+                </li>
+            ))}
+        </ul>
+    );
+});
+MarketList.displayName = 'MarketList';
+
 
 export default function MarketTerminalPage() {
   const [selectedSymbol, setSelectedSymbol] = useState("BTC");
@@ -167,7 +248,7 @@ export default function MarketTerminalPage() {
   
   const filteredCoins = useMemo(() => {
     const query = searchQuery.toLowerCase();
-
+    
     // If there is a search query, filter all market data
     if (query) {
       return marketData.filter(coin => 
@@ -180,78 +261,6 @@ export default function MarketTerminalPage() {
     return marketData.filter(coin => favorites.includes(coin.symbol));
     
   }, [searchQuery, marketData, favorites]);
-
-
-  const MarketList = ({ coins, isSearching }: { coins: MarketCoin[], isSearching: boolean }) => {
-    if (isLoading && marketData.length === 0) {
-      return (
-        <div className="p-2 space-y-2">
-            {Array.from({ length: 15 }).map((_, i) => (
-                <div key={i} className="grid grid-cols-[auto,1fr,1fr] gap-4 items-center p-1">
-                    <Skeleton className="h-5 w-5 rounded-full" />
-                    <div className='w-full'>
-                        <Skeleton className="h-5 w-16" />
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                        <Skeleton className="h-5 w-24 justify-self-end" />
-                        <Skeleton className="h-3 w-10 justify-self-end" />
-                    </div>
-                </div>
-            ))}
-        </div>
-      );
-    }
-    
-    if (coins.length === 0) {
-        if(isSearching) {
-            return <p className="text-center text-muted-foreground p-8">"{searchQuery}" için sonuç bulunamadı.</p>
-        }
-        return (
-            <div className="text-center text-muted-foreground p-8 flex flex-col items-center gap-2">
-                <Heart className="h-6 w-6"/>
-                <p>Henüz favoriniz yok.</p>
-                <p className="text-xs">Bir varlığı favorilere eklemek için arama yapın ve yıldız ikonuna tıklayın.</p>
-            </div>
-        )
-    }
-
-    return (
-        <ul>
-            {coins.map((coin) => (
-                <li key={coin.symbol}>
-                    <button 
-                        className={cn(
-                            "w-full p-2 grid grid-cols-[auto,1fr,1fr] gap-4 items-center text-sm text-left hover:bg-slate-800/50 rounded-md transition-colors",
-                            selectedSymbol === coin.symbol && "bg-primary/10 text-primary"
-                        )}
-                        onClick={() => handleSelectSymbol(coin.symbol)}
-                    >
-                        <Star 
-                            className={cn(
-                                "h-4 w-4 text-muted-foreground/50 hover:text-yellow-400 transition-colors",
-                                favorites.includes(coin.symbol) && "text-yellow-400 fill-yellow-400"
-                            )}
-                            onClick={(e) => toggleFavorite(e, coin.symbol)}
-                        />
-                        <div className="flex flex-col">
-                           <span className="font-bold">{coin.symbol}</span>
-                           <span className="text-xs text-muted-foreground">{coin.name}</span>
-                        </div>
-                        <div className="flex flex-col items-end">
-                            <span className="font-mono">${coin.price < 0.01 ? coin.price.toPrecision(2) : coin.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            <span className={cn(
-                                "font-mono text-xs",
-                                coin.change >= 0 ? "text-green-500" : "text-red-500"
-                            )}>
-                                {coin.change.toFixed(2)}%
-                            </span>
-                        </div>
-                    </button>
-                </li>
-            ))}
-        </ul>
-    );
-  }
 
 
   return (
@@ -278,7 +287,15 @@ export default function MarketTerminalPage() {
                     <div className="text-right font-semibold">Fiyat / 24s Değişim</div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                    <MarketList coins={filteredCoins} isSearching={!!searchQuery}/>
+                    <MarketList 
+                        coins={filteredCoins} 
+                        favorites={favorites}
+                        selectedSymbol={selectedSymbol}
+                        onSelectSymbol={handleSelectSymbol}
+                        onToggleFavorite={toggleFavorite}
+                        isLoading={isLoading}
+                        searchQuery={searchQuery}
+                    />
                 </div>
             </div>
         </aside>
