@@ -62,9 +62,9 @@ export async function GET() {
     }
 
     // 2. Check for API Key
-    const apiKey = process.env.CMC_PRO_API_KEY;
+    const apiKey = process.env.API_KEY; // Use the standard API_KEY
     if (!apiKey) {
-        console.warn('[Market-Data] CoinMarketCap API anahtarı (CMC_PRO_API_KEY) bulunamadı. Yedek veri kullanılıyor.');
+        console.warn('[Market-Data] CoinMarketCap API anahtarı (API_KEY) bulunamadı. Yedek veri kullanılıyor.');
         const fallbackTickers = getFallbackData();
         cachedData = { tickers: fallbackTickers, timestamp: now, source: 'static' };
         return NextResponse.json({ tickers: fallbackTickers, source: 'static' });
