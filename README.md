@@ -15,12 +15,12 @@ Gerçek zamanlı kripto para piyasa verileri, teknik analiz ve otomatik trading 
 ## ✨ Özellikler
 
 ### Market Analizi
-- **Çoklu Borsa Desteği**: Binance, KuCoin, Bybit, Kraken, OKX, Gate.io
-- **Gerçek Zamanlı Veriler**: CCXT kütüphanesi ile canlı piyasa verileri
-- **Gelişmiş Arama**: Tüm USDT çiftlerinde debounced arama
+- **Binance Entegrasyonu**: Binance borsası ile tam entegrasyon
+- **Gerçek Zamanlı Veriler**: CCXT kütüphanesi ile canlı Binance piyasa verileri
+- **Gelişmiş Arama**: Tüm USDT çiftlerinde debounced arama (500ms)
 - **Favori Sistemi**: localStorage ile kalıcı favori coin listesi
-- **TradingView Widget**: Profesyonel interaktif grafik analizi
-- **Multi-Exchange Charts**: Seçilen borsaya özel TradingView grafikleri
+- **TradingView Grafikleri**: Binance verili profesyonel iframe embed grafikleri
+- **Responsive Tasarım**: Mobil ve masaüstü uyumlu arayüz
 
 ### Trading Bot Editörü
 - Sürükle-bırak bot oluşturma arayüzü
@@ -291,16 +291,16 @@ Changes:
 - Debounced search for performance optimization
 ```
 
-## 🔄 Güncel Özellikler (v0.1.0)
+## 🔄 Güncel Özellikler (v0.2.0)
 
 ### Market Analizi
-- ✅ 6 borsa desteği (Binance, KuCoin, Bybit, Kraken, OKX, Gate.io)
-- ✅ Gerçek zamanlı CCXT entegrasyonu
-- ✅ TradingView widget entegrasyonu
-- ✅ Exchange-specific chart display
-- ✅ Favori sistemi (localStorage)
+- ✅ Binance borsası tam entegrasyonu (CCXT)
+- ✅ TradingView iframe embed grafikleri
+- ✅ Binance-only chart display (doğru borsa garantisi)
+- ✅ Favori sistemi (localStorage ile kalıcı)
 - ✅ Debounced search (500ms)
 - ✅ Responsive design
+- ✅ Layout optimizasyonu (cramped panels düzeltildi)
 
 ### Planlanan Özellikler
 - 🔄 Trading bot editörü geliştirmeleri
@@ -321,5 +321,5 @@ Bu proje kişisel kullanım içindir.
 ---
 
 **Son Güncelleme**: 2025-12-24
-**Versiyon**: 0.1.0
+**Versiyon**: 0.2.0 (Binance iframe embed)
 **Geliştirici**: [@prepheadrus](https://github.com/prepheadrus)
