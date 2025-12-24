@@ -7,7 +7,6 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, ArrowRight, Star, Heart, WifiOff, Activity, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,27 +24,17 @@ declare global {
     }
 }
 
-// Memoized TradingView Widget to prevent re-renders on parent state changes
-const TradingViewWidget = memo(({ symbol, exchange }: { symbol: string; exchange: string }) => {
+// Memoized TradingView Widget - Binance only for now
+const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const widgetId = useId();
-    const container_id = `tradingview_widget_${symbol.replace('/', '')}_${exchange}_${widgetId}`;
+    const container_id = `tradingview_widget_${symbol.replace('/', '')}_${widgetId}`;
     const widgetRef = useRef<any>(null);
-
-    // Map our exchange IDs to TradingView exchange IDs
-    const exchangeMap: Record<string, string> = {
-        'binance': 'BINANCE',
-        'kucoin': 'KUCOIN',
-        'bybit': 'BYBIT',
-        'kraken': 'KRAKEN',
-        'okx': 'OKX',
-        'gateio': 'GATEIO',
-    };
 
     useEffect(() => {
         // Clean up the symbol to be compatible with TradingView
+        // (e.g., "BTC/USDT" -> "BTCUSDT")
         const formattedSymbol = symbol.toUpperCase().replace('/USDT', '').replace('/', '');
-        const tvExchange = exchangeMap[exchange.toLowerCase()] || 'BINANCE';
 
         const createWidget = () => {
             const container = document.getElementById(container_id);
@@ -60,10 +49,10 @@ const TradingViewWidget = memo(({ symbol, exchange }: { symbol: string; exchange
                 }
                 container.innerHTML = '';
 
-                // Create new widget with correct exchange
+                // Create new widget - Binance only
                 widgetRef.current = new window.TradingView.widget({
                     autosize: true,
-                    symbol: `${tvExchange}:${formattedSymbol}USDT`,
+                    symbol: `BINANCE:${formattedSymbol}USDT`,
                     interval: "D",
                     timezone: "Etc/UTC",
                     theme: "dark",
@@ -108,10 +97,10 @@ const TradingViewWidget = memo(({ symbol, exchange }: { symbol: string; exchange
                 widgetContainer.innerHTML = '';
             }
         };
-    }, [symbol, exchange, container_id]);
+    }, [symbol, container_id]);
 
     return (
-        <div key={`${symbol}-${exchange}`} className="tradingview-widget-container h-full w-full" ref={containerRef}>
+        <div key={symbol} className="tradingview-widget-container h-full w-full" ref={containerRef}>
             <div id={container_id} className="h-full w-full" />
         </div>
     );
@@ -200,23 +189,11 @@ const MarketList = memo(({ coins, favorites, selectedSymbol, onSelectSymbol, onT
 });
 MarketList.displayName = 'MarketList';
 
-
-// Supported exchanges
-const EXCHANGES = [
-  { id: 'binance', name: 'Binance' },
-  { id: 'kucoin', name: 'KuCoin' },
-  { id: 'bybit', name: 'Bybit' },
-  { id: 'kraken', name: 'Kraken' },
-  { id: 'okx', name: 'OKX' },
-  { id: 'gateio', name: 'Gate.io' },
-] as const;
-
 export default function MarketTerminalPage() {
   const [selectedSymbol, setSelectedSymbol] = useState("BTC/USDT");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [selectedExchange, setSelectedExchange] = useState('binance');
   const [marketData, setMarketData] = useState<MarketCoin[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [source, setSource] = useState<'live' | 'static'>('static');
@@ -256,14 +233,14 @@ export default function MarketTerminalPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch market data when exchange or debounced search changes
+  // Fetch market data from Binance
   useEffect(() => {
     const fetchMarketData = async () => {
       setIsLoading(true);
       setError(null);
       try {
         const params = new URLSearchParams({
-          exchange: selectedExchange,
+          exchange: 'binance', // Binance only for now
         });
 
         if (debouncedSearchQuery) {
@@ -287,7 +264,7 @@ export default function MarketTerminalPage() {
     };
 
     fetchMarketData();
-  }, [selectedExchange, debouncedSearchQuery]);
+  }, [debouncedSearchQuery]);
 
   useEffect(() => {
     const symbolFromUrl = searchParams.get('symbol');
@@ -338,23 +315,20 @@ export default function MarketTerminalPage() {
     <div className="flex-1 flex flex-row overflow-hidden rounded-lg bg-slate-950 border border-slate-800">
         <aside className="w-1/3 max-w-sm flex-shrink-0 border-r border-slate-800 bg-slate-900/50 flex flex-col">
             <div className="p-4 border-b border-slate-800 space-y-3">
-                {/* Exchange Selector */}
-                <div className="flex items-center gap-2">
-                  <Select value={selectedExchange} onValueChange={setSelectedExchange}>
-                    <SelectTrigger className="bg-slate-800 border-slate-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXCHANGES.map(exchange => (
-                        <SelectItem key={exchange.id} value={exchange.id}>
-                          {exchange.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {totalAvailable > 0 && (
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {totalAvailable} coin
+                {/* Binance Market - Search & Stats */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-primary">Binance</span>
+                    {totalAvailable > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        {totalAvailable} coin
+                      </span>
+                    )}
+                  </div>
+                  {source === 'live' && (
+                    <span className="text-xs text-green-500 flex items-center gap-1">
+                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                      Canlı
                     </span>
                   )}
                 </div>
@@ -418,7 +392,7 @@ export default function MarketTerminalPage() {
                 </Button>
             </div>
             <div className="flex-1 bg-background relative overflow-hidden min-h-0">
-                <TradingViewWidget symbol={selectedSymbol} exchange={selectedExchange} />
+                <TradingViewWidget symbol={selectedSymbol} />
             </div>
         </main>
     </div>
