@@ -267,8 +267,8 @@ export default function MarketTerminalPage() {
       : "Popüler Coinler";
 
   return (
-    <div className="flex-1 flex flex-row overflow-hidden rounded-lg bg-slate-950 border border-slate-800 m-6">
-        <aside className="w-1/3 max-w-sm flex-shrink-0 border-r border-slate-800 bg-slate-900/50 flex flex-col">
+    <div className="h-full flex flex-row overflow-hidden bg-slate-950">
+        <aside className="w-1/3 max-w-sm flex-shrink-0 border-r border-slate-800 bg-slate-900/50 flex flex-col min-h-0">
             <div className="p-4 border-b border-slate-800 space-y-3">
                 {/* Binance Market - Search & Stats */}
                 <div className="flex items-center justify-between">
@@ -323,7 +323,7 @@ export default function MarketTerminalPage() {
         </aside>
 
         {/* Right Panel: Chart and Actions */}
-        <main className="flex-1 flex flex-col">
+        <main className="flex-1 flex flex-col min-h-0">
             <div className="flex h-16 items-center justify-between p-4 border-b border-slate-800 shrink-0">
                 <div className="flex items-center gap-4">
                      <h1 className="text-xl font-headline font-bold text-white">{selectedSymbol}</h1>
