@@ -30,6 +30,7 @@ const TradingViewWidget = memo(({ symbol, exchange }: { symbol: string; exchange
     const containerRef = useRef<HTMLDivElement>(null);
     const widgetId = useId();
     const container_id = `tradingview_widget_${symbol.replace('/', '')}_${exchange}_${widgetId}`;
+    const widgetRef = useRef<any>(null);
 
     // Map our exchange IDs to TradingView exchange IDs
     const exchangeMap: Record<string, string> = {
@@ -42,15 +43,25 @@ const TradingViewWidget = memo(({ symbol, exchange }: { symbol: string; exchange
     };
 
     useEffect(() => {
-        let tvWidget: any = null;
-
         // Clean up the symbol to be compatible with TradingView
         const formattedSymbol = symbol.toUpperCase().replace('/USDT', '').replace('/', '');
         const tvExchange = exchangeMap[exchange.toLowerCase()] || 'BINANCE';
 
         const createWidget = () => {
-            if (document.getElementById(container_id) && typeof window.TradingView !== 'undefined') {
-                tvWidget = new window.TradingView.widget({
+            const container = document.getElementById(container_id);
+            if (container && typeof window.TradingView !== 'undefined') {
+                // Clear previous widget if exists
+                if (widgetRef.current) {
+                    try {
+                        widgetRef.current.remove();
+                    } catch (e) {
+                        console.log('Widget cleanup error:', e);
+                    }
+                }
+                container.innerHTML = '';
+
+                // Create new widget with correct exchange
+                widgetRef.current = new window.TradingView.widget({
                     autosize: true,
                     symbol: `${tvExchange}:${formattedSymbol}USDT`,
                     interval: "D",
@@ -85,16 +96,23 @@ const TradingViewWidget = memo(({ symbol, exchange }: { symbol: string; exchange
         }
 
         return () => {
-             const widgetContainer = document.getElementById(container_id);
-             if (widgetContainer) {
-                 widgetContainer.innerHTML = '';
-             }
+            if (widgetRef.current) {
+                try {
+                    widgetRef.current.remove();
+                } catch (e) {
+                    console.log('Widget cleanup error:', e);
+                }
+            }
+            const widgetContainer = document.getElementById(container_id);
+            if (widgetContainer) {
+                widgetContainer.innerHTML = '';
+            }
         };
     }, [symbol, exchange, container_id]);
 
     return (
-        <div key={symbol} className="tradingview-widget-container h-full" ref={containerRef}>
-            <div id={container_id} className="h-full" />
+        <div key={`${symbol}-${exchange}`} className="tradingview-widget-container h-full w-full" ref={containerRef}>
+            <div id={container_id} className="h-full w-full" />
         </div>
     );
 });
@@ -399,7 +417,7 @@ export default function MarketTerminalPage() {
                     </Link>
                 </Button>
             </div>
-            <div className="flex-1 bg-background relative">
+            <div className="flex-1 bg-background relative overflow-hidden min-h-0">
                 <TradingViewWidget symbol={selectedSymbol} exchange={selectedExchange} />
             </div>
         </main>
