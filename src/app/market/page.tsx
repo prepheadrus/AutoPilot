@@ -45,15 +45,15 @@ const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
                 key={symbol} // Force remount on symbol change
                 src={iframeUrl}
                 className="h-full w-full border-0"
-                allowTransparency={true}
-                scrolling="no"
-                allowFullScreen={true}
+                allowFullScreen
                 style={{
                     display: 'block',
                     height: '100%',
                     width: '100%',
                     margin: 0,
                     padding: 0,
+                    border: 'none',
+                    background: 'transparent',
                 }}
             />
             <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
