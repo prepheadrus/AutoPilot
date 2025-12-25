@@ -67,6 +67,7 @@ export class BinanceAPI {
   private baseUrl: string;
   private timeOffset: number = 0;
   private timeSynced: boolean = false;
+  private isFutures: boolean = false;
 
   constructor(credentials: BinanceCredentials) {
     this.apiKey = credentials.apiKey;
@@ -78,21 +79,24 @@ export class BinanceAPI {
       networkType = 'spot-testnet'; // Backwards compatibility
     }
 
-    // Set base URL based on network type
+    // Set base URL and API type based on network type
     switch (networkType) {
       case 'spot-testnet':
         this.baseUrl = 'https://testnet.binance.vision/api';
+        this.isFutures = false;
         break;
       case 'futures-testnet':
-        this.baseUrl = 'https://demo-fapi.binance.com/fapi';
+        this.baseUrl = 'https://demo-fapi.binance.com';
+        this.isFutures = true;
         break;
       case 'mainnet':
       default:
         this.baseUrl = 'https://api.binance.com/api';
+        this.isFutures = false;
         break;
     }
 
-    console.log(`[Binance API] Initialized with ${networkType} (${this.baseUrl})`);
+    console.log(`[Binance API] Initialized with ${networkType} (${this.baseUrl}), Futures: ${this.isFutures}`);
   }
 
   /**
@@ -174,12 +178,14 @@ export class BinanceAPI {
    */
   async ping(): Promise<boolean> {
     try {
-      await this.request('GET', '/v3/ping');
+      const endpoint = this.isFutures ? '/fapi/v1/ping' : '/v3/ping';
+      await this.request('GET', endpoint);
       console.log('[Binance API] Ping successful');
       return true;
     } catch (error: any) {
+      const endpoint = this.isFutures ? '/fapi/v1/ping' : '/v3/ping';
       console.error('[Binance API] Ping failed:', error.message);
-      console.error('[Binance API] URL:', `${this.baseUrl}/v3/ping`);
+      console.error('[Binance API] URL:', `${this.baseUrl}${endpoint}`);
       return false;
     }
   }
@@ -188,7 +194,8 @@ export class BinanceAPI {
    * Get server time
    */
   async getServerTime(): Promise<number> {
-    const response = await this.request<{ serverTime: number }>('GET', '/v3/time');
+    const endpoint = this.isFutures ? '/fapi/v1/time' : '/v3/time';
+    const response = await this.request<{ serverTime: number }>('GET', endpoint);
     return response.serverTime;
   }
 
@@ -212,7 +219,8 @@ export class BinanceAPI {
    * Get account information
    */
   async getAccountInfo(): Promise<AccountInfo> {
-    return this.request<AccountInfo>('GET', '/v3/account', {}, true);
+    const endpoint = this.isFutures ? '/fapi/v2/account' : '/v3/account';
+    return this.request<AccountInfo>('GET', endpoint, {}, true);
   }
 
   /**
@@ -235,7 +243,8 @@ export class BinanceAPI {
    * Get current price for a symbol
    */
   async getPrice(symbol: string): Promise<number> {
-    const response = await this.request<{ price: string }>('GET', '/v3/ticker/price', { symbol });
+    const endpoint = this.isFutures ? '/fapi/v1/ticker/price' : '/v3/ticker/price';
+    const response = await this.request<{ price: string }>('GET', endpoint, { symbol });
     return parseFloat(response.price);
   }
 
@@ -257,7 +266,8 @@ export class BinanceAPI {
       throw new Error('Either quantity or quoteOrderQty must be specified');
     }
 
-    return this.request<BinanceOrderResponse>('POST', '/v3/order', params, true);
+    const endpoint = this.isFutures ? '/fapi/v1/order' : '/v3/order';
+    return this.request<BinanceOrderResponse>('POST', endpoint, params, true);
   }
 
   /**
@@ -277,22 +287,25 @@ export class BinanceAPI {
       timeInForce: order.timeInForce || 'GTC',
     };
 
-    return this.request<BinanceOrderResponse>('POST', '/v3/order', params, true);
+    const endpoint = this.isFutures ? '/fapi/v1/order' : '/v3/order';
+    return this.request<BinanceOrderResponse>('POST', endpoint, params, true);
   }
 
   /**
    * Cancel an order
    */
   async cancelOrder(symbol: string, orderId: number): Promise<any> {
-    return this.request('DELETE', '/v3/order', { symbol, orderId }, true);
+    const endpoint = this.isFutures ? '/fapi/v1/order' : '/v3/order';
+    return this.request('DELETE', endpoint, { symbol, orderId }, true);
   }
 
   /**
    * Get open orders for a symbol
    */
   async getOpenOrders(symbol?: string): Promise<any[]> {
+    const endpoint = this.isFutures ? '/fapi/v1/openOrders' : '/v3/openOrders';
     const params = symbol ? { symbol } : {};
-    return this.request<any[]>('GET', '/v3/openOrders', params, true);
+    return this.request<any[]>('GET', endpoint, params, true);
   }
 
   /**

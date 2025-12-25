@@ -275,14 +275,14 @@ export default function SettingsPage() {
                                             </SelectItem>
                                             <SelectItem value="spot-testnet">
                                                 <div className="flex flex-col">
-                                                    <span className="font-medium">Spot Testnet</span>
-                                                    <span className="text-xs text-muted-foreground">testnet.binance.vision - Spot ticareti testi</span>
+                                                    <span className="font-medium">Spot Demo</span>
+                                                    <span className="text-xs text-muted-foreground">demo.binance.com - Spot ticareti testi</span>
                                                 </div>
                                             </SelectItem>
                                             <SelectItem value="futures-testnet">
                                                 <div className="flex flex-col">
-                                                    <span className="font-medium">Futures Testnet</span>
-                                                    <span className="text-xs text-muted-foreground">testnet.binancefuture.com - Vadeli işlem testi</span>
+                                                    <span className="font-medium">Futures Demo</span>
+                                                    <span className="text-xs text-muted-foreground">demo.binance.com - Vadeli işlem testi</span>
                                                 </div>
                                             </SelectItem>
                                         </SelectContent>
