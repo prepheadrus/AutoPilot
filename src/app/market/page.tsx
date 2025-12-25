@@ -1,16 +1,16 @@
 
 'use client';
 
-import { useState, useEffect, useRef, memo, useId, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, memo, useId, useCallback, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, ArrowRight, Star, Heart, WifiOff, Activity, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from '@/components/ui/skeleton';
+import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
 
 type MarketCoin = {
   symbol: string;
@@ -25,77 +25,39 @@ declare global {
     }
 }
 
-// Memoized TradingView Widget to prevent re-renders on parent state changes
-const TradingViewWidget = memo(({ symbol, exchange }: { symbol: string; exchange: string }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const widgetId = useId();
-    const container_id = `tradingview_widget_${symbol.replace('/', '')}_${exchange}_${widgetId}`;
+// TradingView Iframe Embed - Force Binance by URL
+const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
+    // Format symbol for Binance - handle both "BTC/USDT" and "BTCUSDT" formats
+    const upperSymbol = symbol.toUpperCase();
+    const baseSymbol = upperSymbol.includes('/')
+        ? upperSymbol.split('/')[0]  // "BTC/USDT" -> "BTC"
+        : upperSymbol.replace(/USDT$/, ''); // "BTCUSDT" -> "BTC"
 
-    // Map our exchange IDs to TradingView exchange IDs
-    const exchangeMap: Record<string, string> = {
-        'binance': 'BINANCE',
-        'kucoin': 'KUCOIN',
-        'bybit': 'BYBIT',
-        'kraken': 'KRAKEN',
-        'okx': 'OKX',
-        'gateio': 'GATEIO',
-    };
+    const binanceSymbol = `BINANCE%3A${baseSymbol}USDT`;
 
-    useEffect(() => {
-        let tvWidget: any = null;
+    console.log('📊 TradingView iframe loading:', `BINANCE:${baseSymbol}USDT`);
 
-        // Clean up the symbol to be compatible with TradingView
-        // (e.g., "BTC/USDT" -> "BTCUSDT")
-        const formattedSymbol = symbol.toUpperCase().replace('/USDT', '').replace('/', '');
-        const tvExchange = exchangeMap[exchange.toLowerCase()] || 'BINANCE';
-
-        const createWidget = () => {
-            if (document.getElementById(container_id) && typeof window.TradingView !== 'undefined') {
-                tvWidget = new window.TradingView.widget({
-                    autosize: true,
-                    symbol: `${tvExchange}:${formattedSymbol}USDT`,
-                    interval: "D",
-                    timezone: "Etc/UTC",
-                    theme: "dark",
-                    style: "1",
-                    locale: "tr",
-                    enable_publishing: false,
-                    withdateranges: true,
-                    hide_side_toolbar: false,
-                    allow_symbol_change: false,
-                    container_id: container_id
-                });
-            }
-        }
-
-        const scriptId = 'tradingview-widget-script';
-        const existingScript = document.getElementById(scriptId);
-
-        if (!existingScript) {
-            const script = document.createElement("script");
-            script.id = scriptId;
-            script.src = "https://s3.tradingview.com/tv.js";
-            script.type = "text/javascript";
-            script.async = true;
-            script.onload = createWidget;
-            document.body.appendChild(script);
-        } else {
-            if(window.TradingView) {
-               createWidget();
-            }
-        }
-
-        return () => {
-             const widgetContainer = document.getElementById(container_id);
-             if (widgetContainer) {
-                 widgetContainer.innerHTML = '';
-             }
-        };
-    }, [symbol, exchange, container_id]);
+    // TradingView iframe embed URL with forced Binance exchange
+    const iframeUrl = `https://s.tradingview.com/widgetembed/?frameElementId=tradingview_chart&symbol=${binanceSymbol}&interval=D&hidesidetoolbar=0&hidetoptoolbar=0&symboledit=0&saveimage=0&toolbarbg=f1f3f6&theme=dark&style=1&timezone=Etc%2FUTC&locale=tr&allow_symbol_change=false`;
 
     return (
-        <div key={symbol} className="tradingview-widget-container h-full" ref={containerRef}>
-            <div id={container_id} className="h-full" />
+        <div className="tradingview-widget-container h-full w-full relative">
+            <iframe
+                key={symbol} // Force remount on symbol change
+                src={iframeUrl}
+                className="h-full w-full border-0"
+                allowFullScreen
+                style={{
+                    display: 'block',
+                    height: '100%',
+                    width: '100%',
+                    margin: 0,
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
+                }}
+            />
+            <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
         </div>
     );
 });
@@ -167,12 +129,12 @@ const MarketList = memo(({ coins, favorites, selectedSymbol, onSelectSymbol, onT
                            <span className="text-xs text-muted-foreground">{coin.name}</span>
                         </div>
                         <div className="flex flex-col items-end">
-                            <span className="font-mono">${coin.price < 0.01 ? coin.price.toPrecision(2) : coin.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="font-mono price-transition">${coin.price < 0.01 ? coin.price.toPrecision(2) : coin.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             <span className={cn(
-                                "font-mono text-xs",
+                                "font-mono text-xs price-transition",
                                 coin.change >= 0 ? "text-green-500" : "text-red-500"
                             )}>
-                                {coin.change.toFixed(2)}%
+                                {coin.change >= 0 ? '+' : ''}{coin.change.toFixed(2)}%
                             </span>
                         </div>
                     </button>
@@ -183,30 +145,22 @@ const MarketList = memo(({ coins, favorites, selectedSymbol, onSelectSymbol, onT
 });
 MarketList.displayName = 'MarketList';
 
-// Supported exchanges
-const EXCHANGES = [
-  { id: 'binance', name: 'Binance' },
-  { id: 'kucoin', name: 'KuCoin' },
-  { id: 'bybit', name: 'Bybit' },
-  { id: 'kraken', name: 'Kraken' },
-  { id: 'okx', name: 'OKX' },
-  { id: 'gateio', name: 'Gate.io' },
-] as const;
-
-export default function MarketTerminalPage() {
+function MarketTerminalPage() {
   const [selectedSymbol, setSelectedSymbol] = useState("BTC/USDT");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [selectedExchange, setSelectedExchange] = useState('binance');
   const [marketData, setMarketData] = useState<MarketCoin[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [source, setSource] = useState<'live' | 'static'>('static');
-  const [error, setError] = useState<string | null>(null);
   const [totalAvailable, setTotalAvailable] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  // WebSocket connection for real-time prices
+  const { tickers: wsTickers, status: wsStatus, lastUpdate: wsLastUpdate } = useBinanceWebSocket();
 
   // Load favorites from localStorage on initial render
   useEffect(() => {
@@ -238,14 +192,14 @@ export default function MarketTerminalPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch market data when exchange or debounced search changes
+  // Fetch market data from Binance (initial load)
   useEffect(() => {
     const fetchMarketData = async () => {
       setIsLoading(true);
       setError(null);
       try {
         const params = new URLSearchParams({
-          exchange: selectedExchange,
+          exchange: 'binance', // Binance only for now
         });
 
         if (debouncedSearchQuery) {
@@ -259,20 +213,45 @@ export default function MarketTerminalPage() {
           setMarketData(data.tickers);
           setSource(data.source);
           setTotalAvailable(data.totalAvailable || 0);
-          if (data.error) {
-            setError(data.error);
-          }
         }
       } catch (err: any) {
         console.error('Error fetching market data:', err);
-        setError(err.message || 'Failed to fetch market data');
+        setError(err.message || 'Veri yüklenirken hata oluştu');
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchMarketData();
-  }, [selectedExchange, debouncedSearchQuery]);
+  }, [debouncedSearchQuery]);
+
+  // Merge WebSocket real-time data with existing market data
+  useEffect(() => {
+    if (wsStatus === 'connected' && wsTickers.size > 0 && marketData.length > 0) {
+      setMarketData(prevData => {
+        return prevData.map(coin => {
+          const wsTicker = wsTickers.get(coin.symbol);
+          if (wsTicker) {
+            // Update with real-time data from WebSocket
+            return {
+              ...coin,
+              price: parseFloat(wsTicker.price),
+              change: parseFloat(wsTicker.priceChangePercent),
+            };
+          }
+          return coin;
+        });
+      });
+
+      // Update source to 'live' when WebSocket is active
+      setSource('live');
+    } else if (wsStatus === 'disconnected' || wsStatus === 'error') {
+      // Fallback to static when WebSocket is not available
+      if (source === 'live') {
+        setSource('static');
+      }
+    }
+  }, [wsTickers, wsStatus, marketData.length]); // Only depend on wsTickers and wsStatus changes
 
   useEffect(() => {
     const symbolFromUrl = searchParams.get('symbol');
@@ -320,26 +299,36 @@ export default function MarketTerminalPage() {
       : "Popüler Coinler";
 
   return (
-    <div className="flex-1 flex flex-row overflow-hidden rounded-lg bg-slate-950 border border-slate-800">
-        <aside className="w-1/3 max-w-sm flex-shrink-0 border-r border-slate-800 bg-slate-900/50 flex flex-col">
+    <div className="flex flex-row overflow-hidden bg-slate-950" style={{ height: 'calc(100vh - 4rem)' }}>
+        <aside className="w-1/3 max-w-sm h-full flex-shrink-0 border-r border-slate-800 bg-slate-900/50 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-slate-800 space-y-3">
-                {/* Exchange Selector */}
-                <div className="flex items-center gap-2">
-                  <Select value={selectedExchange} onValueChange={setSelectedExchange}>
-                    <SelectTrigger className="bg-slate-800 border-slate-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXCHANGES.map(exchange => (
-                        <SelectItem key={exchange.id} value={exchange.id}>
-                          {exchange.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {totalAvailable > 0 && (
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {totalAvailable} coin
+                {/* Binance Market - Search & Stats */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-primary">Binance</span>
+                    {totalAvailable > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        {totalAvailable} coin
+                      </span>
+                    )}
+                  </div>
+                  {/* WebSocket Connection Status */}
+                  {wsStatus === 'connected' && (
+                    <span className="text-xs text-green-500 flex items-center gap-1" title={`Son güncelleme: ${wsLastUpdate?.toLocaleTimeString() || '-'}`}>
+                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                      Canlı
+                    </span>
+                  )}
+                  {wsStatus === 'connecting' && (
+                    <span className="text-xs text-yellow-500 flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      Bağlanıyor...
+                    </span>
+                  )}
+                  {(wsStatus === 'disconnected' || wsStatus === 'error') && source === 'static' && (
+                    <span className="text-xs text-amber-400 flex items-center gap-1" title="WebSocket bağlantısı yok - REST API kullanılıyor">
+                      <Activity className="w-3 h-3" />
+                      Statik
                     </span>
                   )}
                 </div>
@@ -379,7 +368,7 @@ export default function MarketTerminalPage() {
         </aside>
 
         {/* Right Panel: Chart and Actions */}
-        <main className="flex-1 flex flex-col">
+        <main className="flex-1 h-full flex flex-col overflow-hidden">
             <div className="flex h-16 items-center justify-between p-4 border-b border-slate-800 shrink-0">
                 <div className="flex items-center gap-4">
                      <h1 className="text-xl font-headline font-bold text-white">{selectedSymbol}</h1>
@@ -402,10 +391,25 @@ export default function MarketTerminalPage() {
                     </Link>
                 </Button>
             </div>
-            <div className="flex-1 bg-background relative">
-                <TradingViewWidget symbol={selectedSymbol} exchange={selectedExchange} />
+            <div className="flex-1 bg-background relative overflow-hidden">
+                <TradingViewWidget symbol={selectedSymbol} />
             </div>
         </main>
     </div>
+  );
+}
+
+export default function MarketPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Yükleniyor...</p>
+        </div>
+      </div>
+    }>
+      <MarketTerminalPage />
+    </Suspense>
   );
 }
