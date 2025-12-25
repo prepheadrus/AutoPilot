@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import { validateApiKeys } from '@/lib/exchange';
+import { BinanceAPI } from '@/lib/binance-api';
 
 export async function POST(request: Request) {
   try {
-    const { apiKey, secretKey } = await request.json();
-    const exchange = 'binance'; // Hardcoded for now
+    const { apiKey, secretKey, testnet = false } = await request.json();
 
     if (!apiKey || !secretKey) {
       return NextResponse.json(
@@ -12,12 +11,44 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    
-    await validateApiKeys(exchange, apiKey, secretKey);
+
+    // Create Binance API client
+    const binance = new BinanceAPI({
+      apiKey,
+      apiSecret: secretKey,
+      testnet,
+    });
+
+    // Test connection
+    const pingSuccess = await binance.ping();
+    if (!pingSuccess) {
+      return NextResponse.json(
+        { success: false, message: 'Binance API\'ye bağlanılamadı.' },
+        { status: 500 }
+      );
+    }
+
+    // Validate credentials
+    const credentialsTest = await binance.testCredentials();
+    if (!credentialsTest.valid) {
+      return NextResponse.json(
+        { success: false, message: credentialsTest.message },
+        { status: 401 }
+      );
+    }
+
+    // Get account info
+    const accountInfo = await binance.getAccountInfo();
 
     return NextResponse.json({
       success: true,
-      message: 'API anahtarları geçerli ve bağlantı başarılı!',
+      message: credentialsTest.message,
+      accountInfo: {
+        canTrade: accountInfo.canTrade,
+        canWithdraw: accountInfo.canWithdraw,
+        canDeposit: accountInfo.canDeposit,
+      },
+      testnet,
     });
 
   } catch (error: any) {

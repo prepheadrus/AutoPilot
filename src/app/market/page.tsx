@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef, memo, useId, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, memo, useId, useCallback, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
@@ -145,7 +145,7 @@ const MarketList = memo(({ coins, favorites, selectedSymbol, onSelectSymbol, onT
 });
 MarketList.displayName = 'MarketList';
 
-export default function MarketTerminalPage() {
+function MarketTerminalPage() {
   const [selectedSymbol, setSelectedSymbol] = useState("BTC/USDT");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
@@ -396,5 +396,20 @@ export default function MarketTerminalPage() {
             </div>
         </main>
     </div>
+  );
+}
+
+export default function MarketPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Yükleniyor...</p>
+        </div>
+      </div>
+    }>
+      <MarketTerminalPage />
+    </Suspense>
   );
 }

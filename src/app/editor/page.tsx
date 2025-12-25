@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, Suspense } from 'react';
 import {
   ReactFlow,
   Background,
@@ -398,7 +398,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
 
 const proOptions = { hideAttribution: true };
 
-export default function StrategyEditorPage() {
+function StrategyEditorPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isCompiling, setIsCompiling] = useState(false);
@@ -1002,4 +1002,17 @@ export default function StrategyEditorPage() {
   );
 }
 
-    
+export default function EditorPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-muted-foreground">Yükleniyor...</p>
+        </div>
+      </div>
+    }>
+      <StrategyEditorPage />
+    </Suspense>
+  );
+}
