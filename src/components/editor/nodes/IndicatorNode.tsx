@@ -1,12 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Handle, Position, NodeProps, useReactFlow } from '@xyflow/react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Rss, Zap } from 'lucide-react';
+import { Rss, Zap, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
@@ -18,20 +18,19 @@ export function IndicatorNode({ data, id }: NodeProps<{
     signalPeriod?: number,
     onOptimize: (nodeId: string) => void 
 }>) {
-  const { setNodes } = useReactFlow();
+  const { setNodes, setEdges } = useReactFlow();
   const { toast } = useToast();
   
-  const updateNodeData = (newData: object) => {
+  const updateNodeData = useCallback((newData: object) => {
     setNodes((nodes) =>
       nodes.map((node) => {
         if (node.id === id) {
-          // Return a new node object to trigger re-render
           return { ...node, data: { ...node.data, ...newData } };
         }
         return node;
       })
     );
-  };
+  }, [id, setNodes]);
   
   const handleTypeChange = (newType: string) => {
     let newData: any = { indicatorType: newType };
@@ -50,6 +49,12 @@ export function IndicatorNode({ data, id }: NodeProps<{
     updateNodeData(newData);
   };
 
+  const handleDelete = useCallback(() => {
+    setNodes(nodes => nodes.filter(n => n.id !== id));
+    setEdges(edges => edges.filter(e => e.source !== id && e.target !== id));
+  }, [id, setNodes, setEdges]);
+
+
   const handleOptimizeClick = () => {
     toast({
         title: "Optimizasyon Başlatıldı...",
@@ -65,17 +70,20 @@ export function IndicatorNode({ data, id }: NodeProps<{
 
   return (
     <div className="bg-slate-800 border-2 border-slate-400 border-l-4 border-l-blue-500 rounded-lg shadow-xl w-64 text-white">
-      <div className="p-3 border-b border-slate-700">
+      <div className="p-3 border-b border-slate-700 flex justify-between items-center">
         <div className="flex items-center gap-2">
             <Rss className="h-5 w-5 text-blue-400" />
             <div className="font-bold">İndikatör</div>
         </div>
+         <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:bg-slate-700 hover:text-white" onClick={handleDelete}>
+            <X className="h-4 w-4" />
+        </Button>
       </div>
       <div className="p-3 space-y-4">
         <div className="space-y-2">
             <Label htmlFor={`${id}-indicator-type`}>İndikatör Tipi</Label>
             <Select 
-              defaultValue={indicatorType} 
+              value={indicatorType} 
               onValueChange={handleTypeChange}
             >
                 <SelectTrigger id={`${id}-indicator-type`} className="bg-slate-700 border-slate-600 text-white">
