@@ -92,19 +92,25 @@ export async function runStrategy(strategy: Strategy, symbol: string = 'BTC/USDT
         if (conditionMet) {
             const decision = strategy.action.type.toUpperCase() as 'BUY' | 'SELL';
             const currentPrice = await fetchPrice(exchange, symbol);
-            
-            // --- THIS IS WHERE THE REAL ORDER WOULD BE PLACED ---
-            // Example:
-            // const amount = strategy.action.amount;
-            // await exchange.createMarketOrder(symbol, decision.toLowerCase(), amount);
-            // console.log(`Placed a ${decision} order for ${amount} of ${symbol}`);
-            // ---
-            
-            return {
-                decision: decision,
-                message: `Karar: ${decision}. Koşul sağlandı (${strategy.indicator.type.toUpperCase()} ${indicatorValue.toFixed(2)} ${operator} ${thresholdValue}). Güncel Fiyat: ${currentPrice}`,
-                data: { indicatorValue, thresholdValue, currentPrice }
-            };
+
+            // Place the actual order
+            try {
+                const amount = strategy.action.amount;
+                const amountInCrypto = amount / currentPrice;
+
+                console.log(`[Bot Engine] Placing ${decision} order for ${amountInCrypto.toFixed(6)} of ${symbol} (~$${amount})`);
+                const order = await exchange.createMarketOrder(symbol, decision.toLowerCase(), amountInCrypto);
+                console.log(`[Bot Engine] Order placed successfully. Order ID: ${order.id}`);
+
+                return {
+                    decision: decision,
+                    message: `Karar: ${decision}. Koşul sağlandı (${strategy.indicator.type.toUpperCase()} ${indicatorValue.toFixed(2)} ${operator} ${thresholdValue}). Güncel Fiyat: ${currentPrice}. Emir yerleştirildi (ID: ${order.id})`,
+                    data: { indicatorValue, thresholdValue, currentPrice, order }
+                };
+            } catch (orderError: any) {
+                console.error('[Bot Engine] Order placement failed:', orderError);
+                throw new Error(`Emir yerleştirilemedi: ${orderError.message}`);
+            }
         } else {
             return {
                 decision: 'WAIT',
