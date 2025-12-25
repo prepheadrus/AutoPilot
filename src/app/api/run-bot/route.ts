@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
-    const { nodes, edges } = await request.json();
+    const { nodes, edges, apiKey, secretKey, symbol = 'BTC/USDT', mode = 'PAPER' } = await request.json();
 
     if (!nodes || !edges) {
       return NextResponse.json(
@@ -20,11 +20,12 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    
-    // For now, we only run in live mode for testing. A real implementation
-    // would get the mode from the bot's config.
-    const mode = 'LIVE'; 
-    const storedKeys = { apiKey: process.env.API_KEY, secret: process.env.API_SECRET }; // In a real app, get from a secure vault or session
+
+    // Use API keys from request, fallback to env vars, or use empty for PAPER mode
+    const storedKeys = {
+      apiKey: apiKey || process.env.API_KEY || '',
+      secret: secretKey || process.env.API_SECRET || ''
+    };
 
     try {
       if (mode === 'LIVE') {
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
         }
       }
       // Pass the keys and mode to the engine
-      const engineResult = await runStrategy(compileResult.strategy, 'BTC/USDT', storedKeys);
+      const engineResult = await runStrategy(compileResult.strategy, symbol, storedKeys);
       
       if (engineResult.decision === 'WAIT' && engineResult.data?.error) {
         throw new Error(engineResult.message);
@@ -41,7 +42,9 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
-        message: `[CANLI] ${engineResult.message}`
+        message: mode === 'LIVE' ? `[CANLI] ${engineResult.message}` : `[PAPER] ${engineResult.message}`,
+        decision: engineResult.decision,
+        data: engineResult.data
       });
 
     } catch (error) {
