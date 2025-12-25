@@ -212,7 +212,9 @@ export class BinanceAPI {
    * Get account information
    */
   async getAccountInfo(): Promise<AccountInfo> {
-    return this.request<AccountInfo>('GET', '/v3/account', {}, true);
+    // The account endpoint is versioned differently for futures.
+    const endpoint = this.baseUrl.includes('fapi') ? '/v2/account' : '/v3/account';
+    return this.request<AccountInfo>('GET', endpoint, {}, true);
   }
 
   /**

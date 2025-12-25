@@ -12,7 +12,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create Binance API client (backwards compatible with testnet)
+    // Create Binance API client (backwards compatible with testnet boolean)
     const binance = new BinanceAPI({
       apiKey,
       apiSecret: secretKey,
