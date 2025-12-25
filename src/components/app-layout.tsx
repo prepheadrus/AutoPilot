@@ -1,4 +1,4 @@
-"use client";
+"use client"
 
 import { usePathname } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -22,6 +22,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { SidebarProvider } from "./ui/sidebar";
 
 const navItems = [
   { href: "/", label: "Özet Panel", icon: LayoutDashboard },
@@ -65,72 +66,74 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isFullHeightPage = isEditorPage || isMarketPage;
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-background">
-      <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-30 shrink-0">
-        <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-lg font-semibold md:text-base text-primary"
-          >
-            <Bot className="h-6 w-6" />
-            <span className="font-headline">CryptoAutomat</span>
-          </Link>
-          <NavigationLinks />
-        </nav>
-
-        {/* Mobile Menu */}
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              className="shrink-0 md:hidden"
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full flex-col bg-background">
+        <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-30 shrink-0">
+          <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-lg font-semibold md:text-base text-primary"
             >
-              <Menu className="h-5 w-5" />
-              <span className="sr-only">Toggle navigation menu</span>
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left">
-            <nav className="grid gap-6 text-lg font-medium">
-                <Link
-                href="/"
-                className="flex items-center gap-2 text-lg font-semibold text-primary"
-                >
-                <Bot className="h-6 w-6" />
-                <span className="sr-only">CryptoAutomat</span>
-                </Link>
-                <NavigationLinks inSheet={true} />
-            </nav>
-          </SheetContent>
-        </Sheet>
+              <Bot className="h-6 w-6" />
+              <span className="font-headline">CryptoAutomat</span>
+            </Link>
+            <NavigationLinks />
+          </nav>
 
-        <div className="flex w-full items-center justify-end gap-4 md:ml-auto md:gap-2 lg:gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col text-right">
-                <span className="text-sm font-medium">Trader Pro</span>
-                <span className="text-xs text-muted-foreground">
-                  user@cryptoautomat.dev
-                </span>
-              </div>
-              <Avatar className="h-9 w-9">
-                <AvatarImage src={userAvatar.imageUrl} data-ai-hint={userAvatar.imageHint} alt="User Avatar" />
-                <AvatarFallback>
-                  <User />
-                </AvatarFallback>
-              </Avatar>
-              <Button variant="ghost" size="icon" className="ml-auto">
-                <LogOut className="h-4 w-4" />
+          {/* Mobile Menu */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 md:hidden"
+              >
+                <Menu className="h-5 w-5" />
+                <span className="sr-only">Toggle navigation menu</span>
               </Button>
-            </div>
-        </div>
-      </header>
+            </SheetTrigger>
+            <SheetContent side="left">
+              <nav className="grid gap-6 text-lg font-medium">
+                  <Link
+                  href="/"
+                  className="flex items-center gap-2 text-lg font-semibold text-primary"
+                  >
+                  <Bot className="h-6 w-6" />
+                  <span className="sr-only">CryptoAutomat</span>
+                  </Link>
+                  <NavigationLinks inSheet={true} />
+              </nav>
+            </SheetContent>
+          </Sheet>
 
-      <main className={cn(
-          "flex flex-1 flex-col",
-          isFullHeightPage ? "p-0 overflow-hidden" : "p-6 overflow-y-auto"
-      )}>
-          {children}
-      </main>
-    </div>
+          <div className="flex w-full items-center justify-end gap-4 md:ml-auto md:gap-2 lg:gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col text-right">
+                  <span className="text-sm font-medium">Trader Pro</span>
+                  <span className="text-xs text-muted-foreground">
+                    user@cryptoautomat.dev
+                  </span>
+                </div>
+                <Avatar className="h-9 w-9">
+                  <AvatarImage src={userAvatar.imageUrl} data-ai-hint={userAvatar.imageHint} alt="User Avatar" />
+                  <AvatarFallback>
+                    <User />
+                  </AvatarFallback>
+                </Avatar>
+                <Button variant="ghost" size="icon" className="ml-auto">
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+          </div>
+        </header>
+
+        <main className={cn(
+            "flex flex-1 flex-col",
+            isFullHeightPage ? "p-0 overflow-hidden" : "p-6 overflow-y-auto"
+        )}>
+            {children}
+        </main>
+      </div>
+    </SidebarProvider>
   );
 }
