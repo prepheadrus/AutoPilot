@@ -86,7 +86,7 @@ export class BinanceAPI {
         this.isFutures = false;
         break;
       case 'futures-testnet':
-        this.baseUrl = 'https://demo-fapi.binance.com';
+        this.baseUrl = 'https://testnet.binancefuture.com';
         this.isFutures = true;
         break;
       case 'mainnet':
