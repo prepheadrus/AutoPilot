@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get account info
+    // Get account info to confirm all permissions
     const accountInfo = await binance.getAccountInfo();
 
     return NextResponse.json({
@@ -56,8 +56,15 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error('API anahtar testi hatası:', error.message);
+    let errorMessage = error.message || 'Bilinmeyen bir hata oluştu.';
+
+    // Add specific error handling for code -2015 as requested
+    if (typeof errorMessage === 'string' && errorMessage.includes('-2015')) {
+      errorMessage = "Kimlik doğrulama hatası (Kod: -2015). Lütfen API anahtarınızın Spot Testnet için doğru izinlere sahip olduğundan ve IP kısıtlaması varsa sunucu IP'sinin eklendiğinden emin olun.";
+    }
+
     return NextResponse.json(
-      { success: false, message: error.message || 'Bilinmeyen bir hata oluştu.' },
+      { success: false, message: errorMessage },
       { status: 500 }
     );
   }
