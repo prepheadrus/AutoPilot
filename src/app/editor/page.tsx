@@ -156,12 +156,16 @@ const formatPrice = (price: number): string => {
 
 // --- START: Backtest Engine ---
 
-const COMMISSION_RATE = 0.00075; // 0.075%
-const SLIPPAGE_RATE = 0.0005; // 0.05%
-
-
 // The core backtesting engine
-const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[], initialBalance: number): BacktestResult | { error: string } => {
+const runBacktestEngine = (
+    ohlcv: any[],
+    nodes: Node[],
+    edges: Edge[],
+    initialBalance: number,
+    commissionRate: number,
+    slippageRate: number
+): BacktestResult | { error: string } => {
+    
     // 1. Find all data sources
     const dataSourceNodes = nodes.filter(n => n.type === 'dataSource');
     if (dataSourceNodes.length === 0) {
@@ -283,8 +287,8 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[], initialBa
         }
 
         if (shouldBuy && !inPosition) {
-            const buyPrice = candle.price * (1 + SLIPPAGE_RATE);
-            const commission = portfolioValue * COMMISSION_RATE;
+            const buyPrice = candle.price * (1 + slippageRate / 100);
+            const commission = portfolioValue * (commissionRate / 100);
             portfolioValue -= commission;
             totalCommissions += commission;
             
@@ -292,10 +296,10 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[], initialBa
             entryPrice = buyPrice;
             trades.push({ timestamp: candle.timestamp, type: 'buy', price: buyPrice });
         } else if (shouldSell && inPosition) {
-            const sellPrice = candle.price * (1 - SLIPPAGE_RATE);
+            const sellPrice = candle.price * (1 - slippageRate / 100);
             const profit = (sellPrice - entryPrice) / entryPrice;
             const positionValue = portfolioValue * (1 + profit);
-            const commission = positionValue * COMMISSION_RATE;
+            const commission = positionValue * (commissionRate / 100);
             totalCommissions += commission;
             
             portfolioValue = positionValue - commission;
@@ -357,22 +361,22 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[], initialBa
     return { ohlcData: finalChartData, tradeData: trades, pnlData, stats };
 };
 
-// Custom Dot for rendering trade arrows on the price line
 const TradeArrowDot = (props: any) => {
     const { cx, cy, payload } = props;
+    const isBuy = payload.tradeMarker?.type === 'buy';
+    const isSell = payload.tradeMarker?.type === 'sell';
 
-    if (!payload.tradeMarker) {
-        return null; // Don't render a dot if there's no trade
-    }
+    if (!isBuy && !isSell) return null;
 
-    const isBuy = payload.tradeMarker.type === 'buy';
     const color = isBuy ? '#22c55e' : '#ef4444'; // green-500 or red-500
     
     // Position arrow below for buy, above for sell
-    const yPosition = isBuy ? cy + 10 : cy - 10;
+    const yOffset = isBuy ? 8 : -8;
+    const finalY = cy + yOffset;
+    
     const arrowPoints = isBuy 
-        ? `${cx},${yPosition - 5} ${cx - 5},${yPosition + 5} ${cx + 5},${yPosition + 5}` // Up arrow
-        : `${cx},${yPosition + 5} ${cx - 5},${yPosition - 5} ${cx + 5},${yPosition - 5}`; // Down arrow
+        ? `${cx},${finalY - 5} ${cx - 5},${finalY + 5} ${cx + 5},${finalY + 5}` // Up arrow
+        : `${cx},${finalY + 5} ${cx - 5},${finalY - 5} ${cx + 5},${finalY - 5}`; // Down arrow
 
     return (
         <polygon points={arrowPoints} fill={color} stroke={color} strokeWidth="1" />
@@ -422,6 +426,8 @@ const backtestFormSchema = z.object({
     to: z.date({ required_error: "Bitiş tarihi gereklidir." }),
   }),
   initialBalance: z.number().min(1, "Bakiye 0'dan büyük olmalıdır."),
+  commission: z.number().min(0, "Komisyon negatif olamaz."),
+  slippage: z.number().min(0, "Kayma negatif olamaz."),
 });
 
 type BacktestFormValues = z.infer<typeof backtestFormSchema>;
@@ -458,6 +464,8 @@ function StrategyEditorPage() {
         to: new Date(),
       },
       initialBalance: 10000,
+      commission: 0.075,
+      slippage: 0.05,
     }
   });
 
@@ -726,7 +734,7 @@ function StrategyEditorPage() {
 
         console.log(`Fetched ${data.ohlcv.length} candles for backtest.`);
         
-        const result = runBacktestEngine(data.ohlcv, nodes, edges, values.initialBalance);
+        const result = runBacktestEngine(data.ohlcv, nodes, edges, values.initialBalance, values.commission, values.slippage);
         if ('error' in result) {
             throw new Error(result.error);
         }
@@ -762,21 +770,19 @@ function StrategyEditorPage() {
     });
 
     return backtestResult.ohlcData.map(ohlc => {
-      const trade = tradesMap.get(ohlc.timestamp);
-      const pnl = backtestResult.pnlData.find(p => p.time === ohlc.time);
-      return {
-        ...ohlc,
-        pnl: pnl?.pnl,
-        tradeMarker: trade ? { ...trade, price: ohlc.price } : undefined,
-      };
+        const trade = tradesMap.get(ohlc.timestamp);
+        return {
+            ...ohlc,
+            tradeMarker: trade || null,
+        };
     });
   }, [backtestResult]);
   
   const indicatorKeys = useMemo(() => {
-    if (!backtestResult || backtestResult.ohlcData.length === 0) return [];
-    const firstDataPoint = backtestResult.ohlcData[0];
+    if (!backtestResult || chartAndTradeData.length === 0) return [];
+    const firstDataPoint = chartAndTradeData[0];
     return Object.keys(firstDataPoint).filter(key => key.includes('('));
-  }, [backtestResult]);
+  }, [backtestResult, chartAndTradeData]);
   
   const hasOscillator = useMemo(() => {
     return indicatorKeys.some(key => key.startsWith('RSI'));
@@ -865,7 +871,7 @@ function StrategyEditorPage() {
                         </Button>
                     </div>
                      {!backtestResult && !isBacktesting ? (
-                         <div className="p-6 grid grid-cols-1 md:grid-cols-[300px,1fr] gap-6 overflow-y-auto">
+                         <div className="p-6 grid grid-cols-1 md:grid-cols-[350px,1fr] gap-6 overflow-y-auto">
                             {/* FORM PANEL */}
                             <div className="flex flex-col gap-6">
                                 <h3 className="font-semibold text-lg">Backtest Ayarları</h3>
@@ -969,6 +975,34 @@ function StrategyEditorPage() {
                                             </FormItem>
                                           )}
                                         />
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <FormField
+                                                control={form.control}
+                                                name="commission"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Komisyon (%)</FormLabel>
+                                                        <FormControl>
+                                                            <Input type="number" step="0.001" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="slippage"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Kayma (%)</FormLabel>
+                                                        <FormControl>
+                                                            <Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
                                         <Button type="submit" className="w-full" disabled={isBacktesting}>
                                           Backtest'i Başlat
                                         </Button>
@@ -1214,3 +1248,5 @@ export default function EditorPage() {
     </Suspense>
   );
 }
+
+    
