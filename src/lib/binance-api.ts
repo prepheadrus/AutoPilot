@@ -51,11 +51,12 @@ export class BinanceAPI {
     if (this.networkType === 'futures-testnet') {
       console.log('[BinanceAPI] Configuring for Futures Testnet (demo-fapi.binance.com)');
       this.exchange.options['defaultType'] = 'future';
+      // CORRECTED: Point to the base fapi URL, let ccxt handle the versioning (v1/v2).
       this.exchange.urls['api'] = {
-        'public': 'https://demo-fapi.binance.com/fapi/v1',
-        'private': 'https://demo-fapi.binance.com/fapi/v1',
-        'fapiPublic': 'https://demo-fapi.binance.com/fapi/v1',
-        'fapiPrivate': 'https://demo-fapi.binance.com/fapi/v1',
+        'public': 'https://demo-fapi.binance.com/fapi',
+        'private': 'https://demo-fapi.binance.com/fapi',
+        'fapiPublic': 'https://demo-fapi.binance.com/fapi',
+        'fapiPrivate': 'https://demo-fapi.binance.com/fapi',
       };
     } else {
         console.log('[BinanceAPI] Configuring for Mainnet (Spot)');
@@ -108,10 +109,9 @@ export class BinanceAPI {
     try {
         console.log(`[BinanceAPI] Fetching account info for ${this.networkType}...`);
         
-        // This is the core fix: Instead of fetchBalance which might call /sapi,
-        // we use a more direct and universally supported endpoint for validation.
         let info;
         if (this.networkType === 'futures-testnet') {
+            // Use the correct method that calls /fapi/v2/account
             info = await this.exchange.fapiPrivateGetAccount();
         } else {
             // For mainnet spot
@@ -119,7 +119,7 @@ export class BinanceAPI {
         }
 
         return {
-            ...info, // Directly return the info from the account endpoint
+            ...info, 
         } as AccountInfo;
 
     } catch(error) {
