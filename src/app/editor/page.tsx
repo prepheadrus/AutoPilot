@@ -1003,7 +1003,7 @@ function StrategyEditorPage() {
                                         yAxisId="price" 
                                         orientation="right"
                                         domain={['dataMin * 0.98', 'dataMax * 1.02']} 
-                                        tickFormatter={(val: number) => `$${(val/1000).toFixed(1)}k`}
+                                        tickFormatter={(val: number) => `$${formatPrice(val)}`}
                                         tick={{fontSize: 12}}
                                         stroke="hsl(var(--accent))"
                                     />
