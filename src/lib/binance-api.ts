@@ -44,7 +44,7 @@ export class BinanceAPI {
 
     const isFutures = this.networkType === 'futures-testnet';
     const isSpotTestnet = this.networkType === 'spot-testnet';
-    
+
     console.log(`[BinanceAPI] Initializing for network: ${this.networkType}`);
 
     const exchangeOptions: any = {
@@ -57,15 +57,13 @@ export class BinanceAPI {
 
     this.exchange = new (ccxt as any).binance(exchangeOptions);
 
-    // IMPORTANT: CCXT handles Spot Testnet via setSandboxMode.
-    // However, for Futures Testnet, sandbox mode is deprecated and will cause errors.
-    // We must NOT call setSandboxMode for futures.
     if (isSpotTestnet) {
       console.log('[BinanceAPI] Enabling sandbox mode for Spot Testnet.');
-      this.exchange.setSandboxMode(true); // This correctly points to testnet.binance.vision
+      this.exchange.setSandboxMode(true); 
     } else if (isFutures) {
-      console.log('[BinanceAPI] Futures Testnet detected. Sandbox mode will NOT be enabled (deprecated).');
-       // The 'future' defaultType correctly targets the futures endpoints.
+      // For Futures Testnet, we set the URL directly as setSandboxMode is deprecated for futures.
+      console.log('[BinanceAPI] Setting direct URL for Futures Testnet.');
+      this.exchange.urls['api'] = 'https://testnet.binancefuture.com';
     }
     
     console.log(`[BinanceAPI] CCXT Initialized. Final API URL: ${JSON.stringify(this.exchange.urls.api)}`);
@@ -218,5 +216,36 @@ export class BinanceAPI {
    */
   async getOpenOrders(symbol?: string): Promise<ccxt.Order[]> {
     return this.exchange.fetchOpenOrders(symbol);
+  }
+}
+
+export async function createBinanceClient(testnet: boolean = false): Promise<BinanceAPI | null> {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const stored = localStorage.getItem('exchangeKeys');
+    if (!stored) return null;
+
+    const keys = JSON.parse(stored);
+    
+    // New format: { apiKey, secretKey, networkType }
+    if (!keys?.apiKey || !keys?.secretKey) {
+      console.warn("API keys in localStorage are missing or in an old format.");
+      return null;
+    }
+
+    // Determine network type based on stored value or legacy testnet flag
+    const networkType: NetworkType = keys.networkType || (testnet ? 'spot-testnet' : 'mainnet');
+
+    return new BinanceAPI({
+      apiKey: keys.apiKey,
+      apiSecret: keys.secretKey,
+      networkType,
+    });
+  } catch (error) {
+    console.error('Error creating Binance client:', error);
+    return null;
   }
 }
