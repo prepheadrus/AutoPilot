@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useCallback, useMemo, useEffect, Suspense } from 'react';
@@ -42,7 +41,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from '@/components/ui/slider';
-import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database, Zap } from 'lucide-react';
+import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database, Zap, CalendarIcon } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
@@ -50,6 +49,24 @@ import { DataSourceNode } from '@/components/editor/nodes/DataSourceNode';
 import type { Bot, BotConfig } from '@/lib/types';
 import type { TooltipProps } from 'recharts';
 import { calculateMACD } from '@/lib/indicators';
+
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+import { addDays } from 'date-fns';
 
 
 const initialNodes: Node[] = [
@@ -395,6 +412,18 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
 };
 // --- END: Mock Data & Backtest Engine ---
 
+const backtestFormSchema = z.object({
+  symbol: z.string().min(3, "Sembol gereklidir."),
+  timeframe: z.string().min(1, "Zaman dilimi gereklidir."),
+  dateRange: z.object({
+    from: z.date({ required_error: "Başlangıç tarihi gereklidir." }),
+    to: z.date({ required_error: "Bitiş tarihi gereklidir." }),
+  }),
+  initialBalance: z.number().min(1, "Bakiye 0'dan büyük olmalıdır."),
+});
+
+type BacktestFormValues = z.infer<typeof backtestFormSchema>;
+
 
 const proOptions = { hideAttribution: true };
 
@@ -412,6 +441,29 @@ function StrategyEditorPage() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const dataSourceNodeSymbol = useMemo(() => {
+    return nodes.find(n => n.type === 'dataSource')?.data.symbol || 'BTC/USDT';
+  }, [nodes]);
+
+  const form = useForm<BacktestFormValues>({
+    resolver: zodResolver(backtestFormSchema),
+    defaultValues: {
+      symbol: dataSourceNodeSymbol,
+      timeframe: "1h",
+      dateRange: {
+        from: addDays(new Date(), -30),
+        to: new Date(),
+      },
+      initialBalance: 10000,
+    }
+  });
+
+  useEffect(() => {
+    // Update form's symbol when the node's symbol changes
+    form.setValue('symbol', dataSourceNodeSymbol);
+  }, [dataSourceNodeSymbol, form]);
+
 
   useEffect(() => {
     const symbol = searchParams.get('symbol');
@@ -651,35 +703,46 @@ function StrategyEditorPage() {
     }
   };
   
-  const handleBacktest = () => {
+  const handleRunBacktest = async (values: BacktestFormValues) => {
     setIsBacktesting(true);
     setBacktestResult(null);
-    setIsBacktestModalOpen(true); // Open modal immediately
+    toast({ title: "Backtest Başlatıldı", description: "Geçmiş veriler çekiliyor ve strateji simüle ediliyor..." });
+
     try {
-        setTimeout(() => {
-            const result = runBacktestEngine(nodes, edges);
-            if ('error' in result) {
-                toast({
-                    title: 'Backtest Hatası',
-                    description: result.error,
-                    variant: 'destructive',
-                });
-                setIsBacktesting(false);
-                setIsBacktestModalOpen(false); // Close modal on error
-                return;
-            }
-            setBacktestResult(result);
-            setIsBacktesting(false);
-        }, 1500);
+        // Fetch historical data
+        const params = new URLSearchParams({
+            symbol: values.symbol,
+            timeframe: values.timeframe,
+            startDate: values.dateRange.from.toISOString(),
+            endDate: values.dateRange.to.toISOString(),
+        });
+        const response = await fetch(`/api/backtest-data?${params.toString()}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Geçmiş veriler çekilemedi.');
+        }
+
+        console.log(`Fetched ${data.ohlcv.length} candles for backtest.`);
+
+        // TODO: Replace mock engine with real engine using fetched data
+        const result = runBacktestEngine(nodes, edges);
+        if ('error' in result) {
+            throw new Error(result.error);
+        }
+
+        setBacktestResult(result);
+
     } catch (error) {
         console.error("Backtest sırasında hata:", error);
+        const errorMessage = (error as Error).message;
         toast({
-            title: 'Beklenmedik Hata',
-            description: 'Backtest motoru çalıştırılamadı.',
+            title: 'Backtest Hatası',
+            description: errorMessage,
             variant: 'destructive',
         });
+    } finally {
         setIsBacktesting(false);
-        setIsBacktestModalOpen(false);
     }
   }
 
@@ -758,12 +821,8 @@ function StrategyEditorPage() {
                         "Stratejiyi Test Et"
                     )}
                 </Button>
-                 <Button onClick={handleBacktest} disabled={isCompiling || isBacktesting} className="bg-indigo-600 hover:bg-indigo-500 text-white">
-                    {isBacktesting ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Hesaplanıyor...</>
-                    ) : (
-                       <><Play className="mr-2 h-4 w-4" /> Backtest Başlat</>
-                    )}
+                 <Button onClick={() => setIsBacktestModalOpen(true)} disabled={isCompiling || isBacktesting} className="bg-indigo-600 hover:bg-indigo-500 text-white">
+                    <Play className="mr-2 h-4 w-4" /> Backtest
                 </Button>
                 <Button variant="secondary" className="bg-slate-600 hover:bg-slate-500" onClick={() => setIsSettingsModalOpen(true)} disabled={isCompiling || isBacktesting}>
                     <Settings className="mr-2 h-4 w-4" />
@@ -785,10 +844,128 @@ function StrategyEditorPage() {
                             <XIcon className="h-5 w-5"/>
                         </Button>
                     </div>
-                     {isBacktesting || !backtestResult ? (
-                        <div className="flex flex-1 items-center justify-center">
-                            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                        </div>
+                     {!backtestResult ? (
+                         <div className="p-6 grid grid-cols-1 md:grid-cols-[300px,1fr] gap-6 overflow-y-auto">
+                            {/* FORM PANEL */}
+                            <div className="flex flex-col gap-6">
+                                <h3 className="font-semibold text-lg">Backtest Ayarları</h3>
+                                 <Form {...form}>
+                                     <form onSubmit={form.handleSubmit(handleRunBacktest)} className="space-y-6">
+                                        <FormField
+                                          control={form.control}
+                                          name="symbol"
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>İşlem Çifti</FormLabel>
+                                              <FormControl>
+                                                <Input {...field} className="bg-slate-800 border-slate-700" />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <FormField
+                                          control={form.control}
+                                          name="timeframe"
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>Zaman Dilimi</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                  <FormControl>
+                                                    <SelectTrigger className="bg-slate-800 border-slate-700">
+                                                      <SelectValue placeholder="Zaman dilimi seçin" />
+                                                    </SelectTrigger>
+                                                  </FormControl>
+                                                  <SelectContent>
+                                                    <SelectItem value="1m">1 Dakika</SelectItem>
+                                                    <SelectItem value="5m">5 Dakika</SelectItem>
+                                                    <SelectItem value="15m">15 Dakika</SelectItem>
+                                                    <SelectItem value="1h">1 Saat</SelectItem>
+                                                    <SelectItem value="4h">4 Saat</SelectItem>
+                                                    <SelectItem value="1d">1 Gün</SelectItem>
+                                                  </SelectContent>
+                                                </Select>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <FormField
+                                          control={form.control}
+                                          name="dateRange"
+                                          render={({ field }) => (
+                                            <FormItem className="flex flex-col">
+                                              <FormLabel>Tarih Aralığı</FormLabel>
+                                              <Popover>
+                                                <PopoverTrigger asChild>
+                                                  <FormControl>
+                                                    <Button
+                                                      variant={"outline"}
+                                                      className={cn(
+                                                        "w-full justify-start text-left font-normal bg-slate-800 border-slate-700 hover:bg-slate-700",
+                                                        !field.value && "text-muted-foreground"
+                                                      )}
+                                                    >
+                                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                                      {field.value?.from ? (
+                                                        field.value.to ? (
+                                                          <>
+                                                            {format(field.value.from, "LLL dd, y")} -{" "}
+                                                            {format(field.value.to, "LLL dd, y")}
+                                                          </>
+                                                        ) : (
+                                                          format(field.value.from, "LLL dd, y")
+                                                        )
+                                                      ) : (
+                                                        <span>Tarih seçin</span>
+                                                      )}
+                                                    </Button>
+                                                  </FormControl>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0" align="start">
+                                                  <Calendar
+                                                    initialFocus
+                                                    mode="range"
+                                                    defaultMonth={field.value.from}
+                                                    selected={field.value}
+                                                    onSelect={field.onChange}
+                                                    numberOfMonths={2}
+                                                  />
+                                                </PopoverContent>
+                                              </Popover>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <FormField
+                                          control={form.control}
+                                          name="initialBalance"
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>Başlangıç Bakiyesi (USDT)</FormLabel>
+                                              <FormControl>
+                                                <Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} className="bg-slate-800 border-slate-700" />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <Button type="submit" className="w-full" disabled={isBacktesting}>
+                                            {isBacktesting ? (
+                                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Başlatılıyor...</>
+                                            ) : (
+                                                "Backtest'i Başlat"
+                                            )}
+                                        </Button>
+                                     </form>
+                                 </Form>
+                            </div>
+                            {/* PLACEHOLDER PANEL */}
+                            <div className="flex flex-col items-center justify-center h-full bg-slate-900 rounded-lg border border-dashed border-slate-700">
+                                <Zap className="h-16 w-16 text-slate-600 mb-4" />
+                                <h3 className="text-xl font-semibold text-slate-400">Backtest'e Hazır</h3>
+                                <p className="text-slate-500 mt-2 text-center">Stratejinizin geçmiş performansını görmek için soldaki formu doldurun.</p>
+                            </div>
+                         </div>
                     ) : (
                     <div className="p-4 md:p-6 flex-1 min-h-0 grid grid-rows-[auto,1fr] gap-6">
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
