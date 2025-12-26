@@ -43,7 +43,6 @@ export class BinanceAPI {
     this.networkType = credentials.networkType || 'mainnet';
 
     const isFutures = this.networkType === 'futures-testnet';
-
     console.log(`[BinanceAPI] Initializing for network: ${this.networkType}`);
 
     const exchangeOptions: any = {
@@ -57,9 +56,14 @@ export class BinanceAPI {
     this.exchange = new (ccxt as any).binance(exchangeOptions);
 
     if (isFutures) {
-        // As per docs, setSandboxMode is deprecated for futures. We must set the URL directly.
-        console.log('[BinanceAPI] Setting direct URL for Futures Testnet to demo-fapi.binance.com.');
-        this.exchange.urls['api'] = 'https://demo-fapi.binance.com/fapi';
+      console.log('[BinanceAPI] Setting direct URL for Futures Testnet to demo-fapi.binance.com.');
+      // CCXT expects an object for urls.api, not a string.
+      this.exchange.urls['api'] = {
+        'public': 'https://demo-fapi.binance.com/fapi/v1',
+        'private': 'https://demo-fapi.binance.com/fapi/v1',
+        'fapiPublic': 'https://demo-fapi.binance.com/fapi/v1',
+        'fapiPrivate': 'https://demo-fapi.binance.com/fapi/v1',
+      };
     }
     
     console.log(`[BinanceAPI] CCXT Initialized. Final API URL: ${JSON.stringify(this.exchange.urls.api)}`);
