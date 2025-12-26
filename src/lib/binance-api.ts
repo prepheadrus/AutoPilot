@@ -10,6 +10,7 @@ export type NetworkType = 'mainnet' | 'spot-testnet' | 'futures-testnet';
 export interface BinanceCredentials {
   apiKey: string;
   apiSecret: string;
+  testnet?: boolean; // Backwards compatibility
   networkType?: NetworkType;
 }
 
@@ -39,7 +40,7 @@ export class BinanceAPI {
   private networkType: NetworkType;
 
   constructor(credentials: BinanceCredentials) {
-    this.networkType = credentials.networkType || 'mainnet';
+    this.networkType = credentials.networkType || (credentials.testnet ? 'spot-testnet' : 'mainnet');
 
     // Instantiate the exchange
     this.exchange = new (ccxt as any).binance({
@@ -52,7 +53,7 @@ export class BinanceAPI {
       this.exchange.setSandboxMode(true);
     }
 
-    // Set the default market type for futures
+    // Set the default market type (futures or spot)
     if (this.networkType === 'futures-testnet') {
       this.exchange.options['defaultType'] = 'future';
     } else {
