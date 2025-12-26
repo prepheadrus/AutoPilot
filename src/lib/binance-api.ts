@@ -4,7 +4,7 @@ import ccxt, { Exchange } from 'ccxt';
 export type OrderSide = 'BUY' | 'SELL';
 export type OrderType = 'MARKET' | 'LIMIT' | 'STOP_LOSS' | 'STOP_LOSS_LIMIT' | 'TAKE_PROFIT' | 'TAKE_PROFIT_LIMIT';
 export type TimeInForce = 'GTC' | 'IOC' | 'FOK';
-export type NetworkType = 'mainnet' | 'spot-testnet' | 'futures-testnet';
+export type NetworkType = 'mainnet' | 'futures-testnet';
 
 export interface BinanceCredentials {
   apiKey: string;
@@ -32,7 +32,7 @@ export interface AccountInfo extends ccxt.Account {}
 
 /**
  * Binance API Client powered by CCXT
- * This class is designed to interact with Binance's Mainnet, Spot Testnet, and Futures Testnet
+ * This class is designed to interact with Binance's Mainnet and Futures Testnet
  * by leveraging ccxt's built-in sandbox and market type options.
  */
 export class BinanceAPI {
@@ -40,10 +40,9 @@ export class BinanceAPI {
   private networkType: NetworkType;
 
   constructor(credentials: BinanceCredentials) {
-    this.networkType = credentials.networkType || (credentials.testnet ? 'spot-testnet' : 'mainnet');
+    this.networkType = credentials.networkType || 'mainnet';
 
     const isFutures = this.networkType === 'futures-testnet';
-    const isSpotTestnet = this.networkType === 'spot-testnet';
 
     console.log(`[BinanceAPI] Initializing for network: ${this.networkType}`);
 
@@ -55,15 +54,10 @@ export class BinanceAPI {
       },
     };
     
-    // Instantiate the exchange
     this.exchange = new (ccxt as any).binance(exchangeOptions);
 
-    if (isSpotTestnet) {
-        console.log('[BinanceAPI] Enabling sandbox mode for Spot Testnet. URL will be set to testnet.binance.vision.');
-        this.exchange.setSandboxMode(true);
-    } else if (isFutures) {
+    if (isFutures) {
         // As per docs, setSandboxMode is deprecated for futures. We must set the URL directly.
-        // The correct URL for the demo trading futures is demo-fapi.binance.com
         console.log('[BinanceAPI] Setting direct URL for Futures Testnet to demo-fapi.binance.com.');
         this.exchange.urls['api'] = 'https://demo-fapi.binance.com/fapi';
     }
@@ -120,8 +114,8 @@ export class BinanceAPI {
   async getAccountInfo(): Promise<AccountInfo> {
     try {
         console.log(`[BinanceAPI] Fetching account info for ${this.networkType}...`);
-        // For futures, fetchBalance returns different structure, we need to be specific.
-        const balanceInfo = this.networkType === 'futures-testnet' 
+        const isFutures = this.networkType === 'futures-testnet';
+        const balanceInfo = isFutures
             ? await this.exchange.fetchBalance({type: 'future'}) 
             : await this.exchange.fetchBalance();
 
@@ -194,8 +188,6 @@ export class BinanceAPI {
     const isSpot = this.exchange.options.defaultType === 'spot';
     const isBuy = side === 'BUY';
     
-    // For spot BUY, use quoteOrderQty; for SELL use quantity.
-    // For futures, it's always quantity.
     const amount = isSpot && isBuy ? quoteOrderQty : quantity;
     const params = isSpot && isBuy ? { 'quoteOrderQty': amount } : {};
 
@@ -241,18 +233,16 @@ export async function createBinanceClient(testnet: boolean = false): Promise<Bin
 
     const keys = JSON.parse(stored);
     
-    // Check for the new, flat format: { apiKey, secretKey, networkType }
     if (!keys?.apiKey || !keys?.secretKey) {
       console.warn("API keys in localStorage are missing or in an old format.");
       return null;
     }
 
-    // Determine network type based on stored value or legacy testnet flag
-    const networkType: NetworkType = keys.networkType || (testnet ? 'spot-testnet' : 'mainnet');
+    const networkType: NetworkType = keys.networkType || (testnet ? 'futures-testnet' : 'mainnet');
 
     return new BinanceAPI({
       apiKey: keys.apiKey,
-      apiSecret: keys.secretKey, // Correctly pass apiSecret
+      apiSecret: keys.secretKey,
       networkType,
     });
   } catch (error) {

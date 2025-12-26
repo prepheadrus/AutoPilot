@@ -35,7 +35,7 @@ export default function SettingsPage() {
     // Exchange Keys State
     const [apiKey, setApiKey] = useState('');
     const [secretKey, setSecretKey] = useState('');
-    const [networkType, setNetworkType] = useState<'mainnet' | 'spot-testnet' | 'futures-testnet'>('mainnet');
+    const [networkType, setNetworkType] = useState<'mainnet' | 'futures-testnet'>('mainnet');
     const [isTesting, setIsTesting] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
 
@@ -128,7 +128,6 @@ export default function SettingsPage() {
                  try {
                     localStorage.setItem('exchangeKeys', JSON.stringify({ apiKey, secretKey, networkType }));
                     const networkLabel = networkType === 'mainnet' ? 'Mainnet (Canlı)'
-                        : networkType === 'spot-testnet' ? 'Spot Testnet'
                         : 'Futures Testnet';
                     toast({ title: "Bağlantı Başarılı! 🚀", description: `API anahtarlarınız güvenli bir şekilde kaydedildi (${networkLabel}).` });
                     setIsConnected(true);
@@ -265,12 +264,6 @@ export default function SettingsPage() {
                                                 <div className="flex flex-col">
                                                     <span className="font-medium">Mainnet (Canlı)</span>
                                                     <span className="text-xs text-muted-foreground">Gerçek para ile işlem</span>
-                                                </div>
-                                            </SelectItem>
-                                            <SelectItem value="spot-testnet">
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium">Spot Testnet</span>
-                                                    <span className="text-xs text-muted-foreground">testnet.binance.vision - Spot ticareti testi</span>
                                                 </div>
                                             </SelectItem>
                                             <SelectItem value="futures-testnet">
