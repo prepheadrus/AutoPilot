@@ -42,7 +42,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from '@/components/ui/slider';
-import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database, Zap, CalendarIcon } from 'lucide-react';
+import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database, Zap, CalendarIcon, History } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
@@ -118,6 +118,21 @@ const initialEdges: Edge[] = [
 ];
 
 
+const backtestFormSchema = z.object({
+  symbol: z.string().min(3, "Sembol gereklidir."),
+  timeframe: z.string().min(1, "Zaman dilimi gereklidir."),
+  dateRange: z.object({
+    from: z.date({ required_error: "Başlangıç tarihi gereklidir." }),
+    to: z.date({ required_error: "Bitiş tarihi gereklidir." }),
+  }),
+  initialBalance: z.number().min(1, "Bakiye 0'dan büyük olmalıdır."),
+  commission: z.number().min(0, "Komisyon negatif olamaz."),
+  slippage: z.number().min(0, "Kayma negatif olamaz."),
+});
+
+type BacktestFormValues = z.infer<typeof backtestFormSchema>;
+
+
 type BacktestResult = {
   ohlcData: any[];
   tradeData: any[];
@@ -131,6 +146,13 @@ type BacktestResult = {
     totalCommissions: number;
   };
 };
+
+type BacktestRun = {
+    id: number;
+    params: BacktestFormValues;
+    result: BacktestResult;
+};
+
 
 const initialStrategyConfig: BotConfig = {
     mode: 'PAPER',
@@ -371,15 +393,17 @@ const TradeArrowDot = (props: any) => {
     const color = isBuy ? '#22c55e' : '#ef4444'; // green-500 or red-500
     
     // Position arrow below for buy, above for sell
-    const yOffset = isBuy ? 8 : -8;
+    const yOffset = isBuy ? 10 : -10;
     const finalY = cy + yOffset;
     
     const arrowPoints = isBuy 
-        ? `${cx},${finalY - 5} ${cx - 5},${finalY + 5} ${cx + 5},${finalY + 5}` // Up arrow
-        : `${cx},${finalY + 5} ${cx - 5},${finalY - 5} ${cx + 5},${finalY - 5}`; // Down arrow
+        ? `${cx},${cy - 5} ${cx - 5},${cy + 5} ${cx + 5},${cy + 5}` // Up arrow, but we position it below the line
+        : `${cx},${cy + 5} ${cx - 5},${cy - 5} ${cx + 5},${cy - 5}`; // Down arrow, positioned above the line
 
     return (
-        <polygon points={arrowPoints} fill={color} stroke={color} strokeWidth="1" />
+       <g transform={`translate(0, ${yOffset})`}>
+         <polygon points={arrowPoints} fill={color} stroke={color} strokeWidth="1" />
+       </g>
     );
 };
 
@@ -418,21 +442,6 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
 };
 // --- END: Backtest Engine ---
 
-const backtestFormSchema = z.object({
-  symbol: z.string().min(3, "Sembol gereklidir."),
-  timeframe: z.string().min(1, "Zaman dilimi gereklidir."),
-  dateRange: z.object({
-    from: z.date({ required_error: "Başlangıç tarihi gereklidir." }),
-    to: z.date({ required_error: "Bitiş tarihi gereklidir." }),
-  }),
-  initialBalance: z.number().min(1, "Bakiye 0'dan büyük olmalıdır."),
-  commission: z.number().min(0, "Komisyon negatif olamaz."),
-  slippage: z.number().min(0, "Kayma negatif olamaz."),
-});
-
-type BacktestFormValues = z.infer<typeof backtestFormSchema>;
-
-
 const proOptions = { hideAttribution: true };
 
 function StrategyEditorPage() {
@@ -443,7 +452,10 @@ function StrategyEditorPage() {
   const [isBacktestModalOpen, setIsBacktestModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [strategyConfig, setStrategyConfig] = useState<BotConfig>(initialStrategyConfig);
-  const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
+  
+  const [backtestHistory, setBacktestHistory] = useState<BacktestRun[]>([]);
+  const [selectedRun, setSelectedRun] = useState<BacktestRun | null>(null);
+  
   const [editingBotId, setEditingBotId] = useState<number | null>(null);
 
   const { toast } = useToast();
@@ -473,6 +485,27 @@ function StrategyEditorPage() {
     // Update form's symbol when the node's symbol changes
     form.setValue('symbol', dataSourceNodeSymbol);
   }, [dataSourceNodeSymbol, form]);
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    try {
+        const storedHistory = localStorage.getItem('backtestHistory');
+        if (storedHistory) {
+            setBacktestHistory(JSON.parse(storedHistory));
+        }
+    } catch (error) {
+        console.error("Backtest geçmişi yüklenemedi:", error);
+    }
+  }, []);
+
+  // Save history to localStorage whenever it changes
+  useEffect(() => {
+    try {
+        localStorage.setItem('backtestHistory', JSON.stringify(backtestHistory));
+    } catch (error) {
+        console.error("Backtest geçmişi kaydedilemedi:", error);
+    }
+  }, [backtestHistory]);
 
 
   useEffect(() => {
@@ -521,8 +554,6 @@ function StrategyEditorPage() {
   );
   
   const handleOptimizePeriod = (nodeId: string) => {
-    // This is a placeholder for a more complex optimization process.
-    // For now, it's disabled in the UI for MACD and has a simple logic for others.
     const nodeToOptimize = nodes.find(n => n.id === nodeId);
     if (!nodeToOptimize) return;
 
@@ -535,7 +566,6 @@ function StrategyEditorPage() {
     });
 
     for (let period = 7; period <= 30; period++) {
-        // Here you would run the backtest with the temporary period and compare results
         const randomProfitFactor = Math.random() * 2;
         if (randomProfitFactor > bestProfitFactor) {
             bestProfitFactor = randomProfitFactor;
@@ -714,11 +744,10 @@ function StrategyEditorPage() {
   
   const handleRunBacktest = async (values: BacktestFormValues) => {
     setIsBacktesting(true);
-    setBacktestResult(null); // Clear previous results
+    setSelectedRun(null); // Clear previous results to show loading state
     toast({ title: "Backtest Başlatıldı", description: "Geçmiş veriler çekiliyor ve strateji simüle ediliyor..." });
 
     try {
-        // Fetch historical data
         const params = new URLSearchParams({
             symbol: values.symbol,
             timeframe: values.timeframe,
@@ -739,7 +768,14 @@ function StrategyEditorPage() {
             throw new Error(result.error);
         }
 
-        setBacktestResult(result);
+        const newRun: BacktestRun = {
+            id: Date.now(),
+            params: values,
+            result: result
+        };
+
+        setBacktestHistory(prev => [newRun, ...prev].slice(0, 20)); // Keep last 20 runs
+        setSelectedRun(newRun);
 
     } catch (error) {
         console.error("Backtest sırasında hata:", error);
@@ -749,8 +785,6 @@ function StrategyEditorPage() {
             description: errorMessage,
             variant: 'destructive',
         });
-        // Important: Stay on the form by not setting a result.
-        // setBacktestResult(null); // This is already the case
     } finally {
         setIsBacktesting(false);
     }
@@ -759,6 +793,8 @@ function StrategyEditorPage() {
   const handleConfigChange = (field: keyof BotConfig, value: any) => {
     setStrategyConfig(prev => ({...prev, [field]: value}));
   }
+  
+  const backtestResult = selectedRun?.result;
 
   const chartAndTradeData = useMemo(() => {
     if (!backtestResult) return [];
@@ -793,15 +829,13 @@ function StrategyEditorPage() {
   }, [indicatorKeys]);
 
   const openBacktestModal = () => {
-    // Always reset results before opening the modal to ensure the form shows up.
-    setBacktestResult(null);
+    setSelectedRun(null);
     setIsBacktestModalOpen(true);
   }
 
   const closeBacktestModal = () => {
     setIsBacktestModalOpen(false);
-    // Reset results on close to ensure a clean state for the next run.
-    setBacktestResult(null);
+    setSelectedRun(null);
   }
 
 
@@ -863,273 +897,99 @@ function StrategyEditorPage() {
         
         {isBacktestModalOpen && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-                <div className="w-[90vw] h-[85vh] flex flex-col rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
+                <div className="w-[90vw] h-[90vh] flex flex-col rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
                     <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0">
                         <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu</h2>
                         <Button variant="ghost" size="icon" onClick={closeBacktestModal}>
                             <XIcon className="h-5 w-5"/>
                         </Button>
                     </div>
-                     {!backtestResult && !isBacktesting ? (
-                         <div className="p-6 grid grid-cols-1 md:grid-cols-[350px,1fr] gap-6 overflow-y-auto">
-                            {/* FORM PANEL */}
-                            <div className="flex flex-col gap-6">
-                                <h3 className="font-semibold text-lg">Backtest Ayarları</h3>
-                                 <Form {...form}>
-                                     <form onSubmit={form.handleSubmit(handleRunBacktest)} className="space-y-6">
-                                        <FormField
-                                          control={form.control}
-                                          name="symbol"
-                                          render={({ field }) => (
-                                            <FormItem>
-                                              <FormLabel>İşlem Çifti</FormLabel>
-                                              <FormControl>
-                                                <Input {...field} className="bg-slate-800 border-slate-700" />
-                                              </FormControl>
-                                              <FormMessage />
-                                            </FormItem>
-                                          )}
-                                        />
-                                        <FormField
-                                          control={form.control}
-                                          name="timeframe"
-                                          render={({ field }) => (
-                                            <FormItem>
-                                              <FormLabel>Zaman Dilimi</FormLabel>
-                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                  <FormControl>
-                                                    <SelectTrigger className="bg-slate-800 border-slate-700">
-                                                      <SelectValue placeholder="Zaman dilimi seçin" />
-                                                    </SelectTrigger>
-                                                  </FormControl>
-                                                  <SelectContent>
-                                                    <SelectItem value="1m">1 Dakika</SelectItem>
-                                                    <SelectItem value="5m">5 Dakika</SelectItem>
-                                                    <SelectItem value="15m">15 Dakika</SelectItem>
-                                                    <SelectItem value="1h">1 Saat</SelectItem>
-                                                    <SelectItem value="4h">4 Saat</SelectItem>
-                                                    <SelectItem value="1d">1 Gün</SelectItem>
-                                                  </SelectContent>
-                                                </Select>
-                                              <FormMessage />
-                                            </FormItem>
-                                          )}
-                                        />
-                                        <FormField
-                                          control={form.control}
-                                          name="dateRange"
-                                          render={({ field }) => (
-                                            <FormItem className="flex flex-col">
-                                              <FormLabel>Tarih Aralığı</FormLabel>
-                                              <Popover>
-                                                <PopoverTrigger asChild>
-                                                  <FormControl>
-                                                    <Button
-                                                      variant={"outline"}
-                                                      className={cn(
-                                                        "w-full justify-start text-left font-normal bg-slate-800 border-slate-700 hover:bg-slate-700",
-                                                        !field.value && "text-muted-foreground"
-                                                      )}
-                                                    >
-                                                      <CalendarIcon className="mr-2 h-4 w-4" />
-                                                      {field.value?.from ? (
-                                                        field.value.to ? (
-                                                          <>
-                                                            {format(field.value.from, "LLL dd, y")} -{" "}
-                                                            {format(field.value.to, "LLL dd, y")}
-                                                          </>
-                                                        ) : (
-                                                          format(field.value.from, "LLL dd, y")
-                                                        )
-                                                      ) : (
-                                                        <span>Tarih seçin</span>
-                                                      )}
-                                                    </Button>
-                                                  </FormControl>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-auto p-0" align="start">
-                                                  <Calendar
-                                                    initialFocus
-                                                    mode="range"
-                                                    defaultMonth={field.value.from}
-                                                    selected={field.value}
-                                                    onSelect={field.onChange}
-                                                    numberOfMonths={2}
-                                                  />
-                                                </PopoverContent>
-                                              </Popover>
-                                              <FormMessage />
-                                            </FormItem>
-                                          )}
-                                        />
-                                        <FormField
-                                          control={form.control}
-                                          name="initialBalance"
-                                          render={({ field }) => (
-                                            <FormItem>
-                                              <FormLabel>Başlangıç Bakiyesi (USDT)</FormLabel>
-                                              <FormControl>
-                                                <Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} className="bg-slate-800 border-slate-700" />
-                                              </FormControl>
-                                              <FormMessage />
-                                            </FormItem>
-                                          )}
-                                        />
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <FormField
-                                                control={form.control}
-                                                name="commission"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Komisyon (%)</FormLabel>
-                                                        <FormControl>
-                                                            <Input type="number" step="0.001" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" />
-                                                        </FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={form.control}
-                                                name="slippage"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Kayma (%)</FormLabel>
-                                                        <FormControl>
-                                                            <Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" />
-                                                        </FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                        </div>
-                                        <Button type="submit" className="w-full" disabled={isBacktesting}>
-                                          Backtest'i Başlat
-                                        </Button>
-                                     </form>
-                                 </Form>
-                            </div>
-                            {/* PLACEHOLDER PANEL */}
-                            <div className="flex flex-col items-center justify-center h-full bg-slate-900 rounded-lg border border-dashed border-slate-700">
-                                <Zap className="h-16 w-16 text-slate-600 mb-4" />
-                                <h3 className="text-xl font-semibold text-slate-400">Backtest'e Hazır</h3>
-                                <p className="text-slate-500 mt-2 text-center">Stratejinizin geçmiş performansını görmek için soldaki formu doldurun.</p>
-                            </div>
-                         </div>
-                     ) : isBacktesting ? (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                          <Loader2 className="h-12 w-12 animate-spin mb-4" />
-                          <h3 className="text-xl font-semibold">Backtest Çalıştırılıyor...</h3>
-                          <p className="text-slate-500 mt-2">Geçmiş veriler çekiliyor ve stratejiniz simüle ediliyor. Lütfen bekleyin.</p>
-                        </div>
-                     ) : backtestResult ? (
-                    <div className="p-4 md:p-6 flex-1 min-h-0 grid grid-rows-[auto,1fr] gap-6">
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-                            <div className="rounded-lg bg-slate-800/50 p-3">
-                                <p className="text-xs text-slate-400">Net Kâr</p>
-                                <p className={`text-lg font-bold ${backtestResult.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    {backtestResult.stats.netProfit.toFixed(2)}%
-                                </p>
-                            </div>
-                             <div className="rounded-lg bg-slate-800/50 p-3">
-                                <p className="text-xs text-slate-400">Toplam İşlem</p>
-                                <p className="text-lg font-bold">{backtestResult.stats.totalTrades}</p>
-                            </div>
-                            <div className="rounded-lg bg-slate-800/50 p-3">
-                                <p className="text-xs text-slate-400">Başarı Oranı</p>
-                                <p className="text-lg font-bold">{backtestResult.stats.winRate.toFixed(1)}%</p>
-                            </div>
-                             <div className="rounded-lg bg-slate-800/50 p-3">
-                                <p className="text-xs text-slate-400">Toplam Komisyon</p>
-                                <p className="text-lg font-bold">${backtestResult.stats.totalCommissions.toFixed(2)}</p>
-                            </div>
-                            <div className="rounded-lg bg-slate-800/50 p-3">
-                                <p className="text-xs text-slate-400">Kâr Faktörü</p>
-                                <p className="text-lg font-bold">{isFinite(backtestResult.stats.profitFactor) ? backtestResult.stats.profitFactor.toFixed(2) : "∞"}</p>
-                            </div>
-                        </div>
-
-                        <div className="w-full h-full">
-                           <ResponsiveContainer width="100%" height={(hasOscillator || hasMACD) ? "70%" : "100%"}>
-                               <ComposedChart data={chartAndTradeData} syncId="backtestChart">
-                                    <defs>
-                                        <linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
-                                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                    <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                    <YAxis 
-                                        yAxisId="pnl" 
-                                        orientation="left"
-                                        domain={['auto', 'auto']} 
-                                        tickFormatter={(val: number) => `$${val.toLocaleString()}`}
-                                        tick={{fontSize: 12}}
-                                        stroke="hsl(var(--primary))"
-                                    />
-                                    <YAxis 
-                                        yAxisId="price" 
-                                        orientation="right"
-                                        domain={['dataMin * 0.98', 'dataMax * 1.02']} 
-                                        tickFormatter={(val: number) => `$${formatPrice(val)}`}
-                                        tick={{fontSize: 12}}
-                                        stroke="hsl(var(--accent))"
-                                    />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                    
-                                    <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye (Maliyetler Sonrası)" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
-                                    
-                                    <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
-                                     {indicatorKeys.filter(k => !k.startsWith('RSI') && !k.startsWith('MACD')).map((key, index) => (
-                                        <Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={["#facc15", "#38bdf8"][(index) % 2]} dot={false} strokeWidth={1.5} />
-                                    ))}
-                                    
-                                </ComposedChart>
-                            </ResponsiveContainer>
-                             {hasOscillator && !hasMACD && (
-                                <ResponsiveContainer width="100%" height="30%">
-                                    <ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}>
-                                        <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                        <XAxis dataKey="time" hide={true}/>
-                                        <YAxis yAxisId="indicator" orientation="right" domain={[0, 100]} tickCount={4} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                        <Tooltip content={<CustomTooltip />} />
-                                        <ReferenceLine yAxisId="indicator" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
-                                        <ReferenceLine yAxisId="indicator" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
-                                        {indicatorKeys.filter(k => k.startsWith('RSI')).map((key, index) => (
-                                            <Line key={key} yAxisId="indicator" type="monotone" dataKey={key} stroke={["#eab308", "#3b82f6"][index % 2]} fillOpacity={0.2} name={key} dot={false}/>
+                     <div className="flex flex-1 min-h-0">
+                        <aside className="w-64 flex-shrink-0 border-r border-slate-800 p-4 flex flex-col gap-4">
+                            {!backtestResult && !isBacktesting ? (
+                                <div className="flex flex-col gap-6 overflow-y-auto">
+                                    <h3 className="font-semibold text-lg flex items-center gap-2"><Settings className="h-5 w-5" />Backtest Ayarları</h3>
+                                    <Form {...form}>
+                                        <form onSubmit={form.handleSubmit(handleRunBacktest)} className="space-y-6">
+                                            <FormField control={form.control} name="symbol" render={({ field }) => (<FormItem><FormLabel>İşlem Çifti</FormLabel><FormControl><Input {...field} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)} />
+                                            <FormField control={form.control} name="timeframe" render={({ field }) => (<FormItem><FormLabel>Zaman Dilimi</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="bg-slate-800 border-slate-700"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="1m">1 Dakika</SelectItem><SelectItem value="5m">5 Dakika</SelectItem><SelectItem value="15m">15 Dakika</SelectItem><SelectItem value="1h">1 Saat</SelectItem><SelectItem value="4h">4 Saat</SelectItem><SelectItem value="1d">1 Gün</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                                            <FormField control={form.control} name="dateRange" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Tarih Aralığı</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal bg-slate-800 border-slate-700 hover:bg-slate-700", !field.value && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{field.value?.from ? (field.value.to ? (<>{format(field.value.from, "LLL dd, y")} - {format(field.value.to, "LLL dd, y")}</>) : (format(field.value.from, "LLL dd, y"))) : (<span>Tarih seçin</span>)}</Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={field.value.from} selected={field.value} onSelect={field.onChange} numberOfMonths={2}/></PopoverContent></Popover><FormMessage /></FormItem>)} />
+                                            <FormField control={form.control} name="initialBalance" render={({ field }) => (<FormItem><FormLabel>Bakiye (USDT)</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <FormField control={form.control} name="commission" render={({ field }) => (<FormItem><FormLabel>Komisyon (%)</FormLabel><FormControl><Input type="number" step="0.001" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
+                                                <FormField control={form.control} name="slippage" render={({ field }) => (<FormItem><FormLabel>Kayma (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
+                                            </div>
+                                            <Button type="submit" className="w-full" disabled={isBacktesting}>Backtest'i Başlat</Button>
+                                        </form>
+                                    </Form>
+                                </div>
+                            ) : (
+                                <>
+                                    <h3 className="font-semibold text-lg flex items-center gap-2"><History className="h-5 w-5" />Geçmiş Testler</h3>
+                                    <div className="flex-1 overflow-y-auto -mr-4 pr-3 space-y-2">
+                                        {backtestHistory.length === 0 && !isBacktesting && <p className="text-sm text-muted-foreground text-center py-8">Henüz test yapılmadı.</p>}
+                                        {isBacktesting && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin"/><span>Test çalışıyor...</span></div>}
+                                        {backtestHistory.map(run => (
+                                            <button key={run.id} onClick={() => setSelectedRun(run)} className={cn("w-full text-left p-2 rounded-md hover:bg-slate-800 transition-colors border", selectedRun?.id === run.id ? "bg-slate-800 border-primary/50" : "bg-slate-800/50 border-transparent")}>
+                                                <div className="flex justify-between items-center text-sm font-semibold">
+                                                    <span>{run.params.symbol}</span>
+                                                    <span className={cn(run.result.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400')}>
+                                                        {run.result.stats.netProfit.toFixed(2)}%
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">{run.params.timeframe} - {format(new Date(run.params.dateRange.from), "MMM d, yy")} - {format(new Date(run.params.dateRange.to), "MMM d, yy")}</p>
+                                            </button>
                                         ))}
+                                    </div>
+                                </>
+                            )}
+                        </aside>
+                        <main className="flex-1 min-h-0">
+                            {isBacktesting ? (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                <Loader2 className="h-12 w-12 animate-spin mb-4" />
+                                <h3 className="text-xl font-semibold">Backtest Çalıştırılıyor...</h3>
+                                <p className="text-slate-500 mt-2">Geçmiş veriler çekiliyor ve stratejiniz simüle ediliyor. Lütfen bekleyin.</p>
+                                </div>
+                            ) : backtestResult ? (
+                            <div className="p-4 md:p-6 flex-1 min-h-0 grid grid-rows-[auto,1fr] gap-6 h-full">
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                                    <div className="rounded-lg bg-slate-800/50 p-3">
+                                        <p className="text-xs text-slate-400">Net Kâr</p>
+                                        <p className={`text-lg font-bold ${backtestResult.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{backtestResult.stats.netProfit.toFixed(2)}%</p>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam İşlem</p><p className="text-lg font-bold">{backtestResult.stats.totalTrades}</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Başarı Oranı</p><p className="text-lg font-bold">{backtestResult.stats.winRate.toFixed(1)}%</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam Komisyon</p><p className="text-lg font-bold">${backtestResult.stats.totalCommissions.toFixed(2)}</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Kâr Faktörü</p><p className="text-lg font-bold">{isFinite(backtestResult.stats.profitFactor) ? backtestResult.stats.profitFactor.toFixed(2) : "∞"}</p></div>
+                                </div>
+                                <div className="w-full h-full">
+                                <ResponsiveContainer width="100%" height={(hasOscillator || hasMACD) ? "70%" : "100%"}>
+                                    <ComposedChart data={chartAndTradeData} syncId="backtestChart">
+                                        <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
+                                        <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/><XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                        <YAxis yAxisId="pnl" orientation="left" domain={['auto', 'auto']} tickFormatter={(val: number) => `$${val.toLocaleString()}`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" />
+                                        <YAxis yAxisId="price" orientation="right" domain={['dataMin * 0.98', 'dataMax * 1.02']} tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                                        <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye (Maliyetler Sonrası)" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
+                                        <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
+                                        {indicatorKeys.filter(k => !k.startsWith('RSI') && !k.startsWith('MACD')).map((key, index) => (<Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={["#facc15", "#38bdf8"][(index) % 2]} dot={false} strokeWidth={1.5} />))}
                                     </ComposedChart>
                                 </ResponsiveContainer>
+                                {hasOscillator && !hasMACD && (<ResponsiveContainer width="100%" height="30%"><ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}><CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/><XAxis dataKey="time" hide={true}/><YAxis yAxisId="indicator" orientation="right" domain={[0, 100]} tickCount={4} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" /><Tooltip content={<CustomTooltip />} /><ReferenceLine yAxisId="indicator" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" /><ReferenceLine yAxisId="indicator" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />{indicatorKeys.filter(k => k.startsWith('RSI')).map((key, index) => (<Line key={key} yAxisId="indicator" type="monotone" dataKey={key} stroke={["#eab308", "#3b82f6"][index % 2]} fillOpacity={0.2} name={key} dot={false}/>))}</ComposedChart></ResponsiveContainer>)}
+                                {hasMACD && (<ResponsiveContainer width="100%" height="30%"><ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}><CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/><XAxis dataKey="time" hide={true}/><YAxis yAxisId="macd" orientation="right" domain={['auto', 'auto']} tickCount={5} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" /><Tooltip content={<CustomTooltip />} /><ReferenceLine yAxisId="macd" y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />{indicatorKeys.filter(k => k.includes('_Hist')).map((key) => (<Bar key={key} yAxisId="macd" dataKey={key} name="Histogram" >{chartAndTradeData.map((entry, i) => (<Cell key={`cell-${i}`} fill={(entry[key] ?? 0) > 0 ? '#22c55e' : '#ef4444'} />))}</Bar>))}{indicatorKeys.filter(k => k.includes('_MACD')).map((key) => (<Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="MACD" stroke="#3b82f6" dot={false}/>))}{indicatorKeys.filter(k => k.includes('_Signal')).map((key) => (<Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="Signal" stroke="#f97316" dot={false}/>))}</ComposedChart></ResponsiveContainer>)}
+                                </div>
+                            </div>
+                            ) : (
+                               <div className="flex flex-col items-center justify-center h-full bg-slate-900 rounded-lg border border-dashed border-slate-700">
+                                    <Zap className="h-16 w-16 text-slate-600 mb-4" />
+                                    <h3 className="text-xl font-semibold text-slate-400">Backtest'e Hazır</h3>
+                                    <p className="text-slate-500 mt-2 text-center">Stratejinizin geçmiş performansını görmek için soldaki formu doldurun.</p>
+                                </div>
                             )}
-                             {hasMACD && (
-                                <ResponsiveContainer width="100%" height="30%">
-                                    <ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}>
-                                        <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                        <XAxis dataKey="time" hide={true}/>
-                                        <YAxis yAxisId="macd" orientation="right" domain={['auto', 'auto']} tickCount={5} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                        <Tooltip content={<CustomTooltip />} />
-                                        <ReferenceLine yAxisId="macd" y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
-                                        {indicatorKeys.filter(k => k.includes('_Hist')).map((key) => (
-                                            <Bar key={key} yAxisId="macd" dataKey={key} name="Histogram" >
-                                               {chartAndTradeData.map((entry, i) => (
-                                                    <Cell key={`cell-${i}`} fill={(entry[key] ?? 0) > 0 ? '#22c55e' : '#ef4444'} />
-                                                ))}
-                                            </Bar>
-                                        ))}
-                                        {indicatorKeys.filter(k => k.includes('_MACD')).map((key) => (
-                                            <Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="MACD" stroke="#3b82f6" dot={false}/>
-                                        ))}
-                                        {indicatorKeys.filter(k => k.includes('_Signal')).map((key) => (
-                                            <Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="Signal" stroke="#f97316" dot={false}/>
-                                        ))}
-                                    </ComposedChart>
-                                </ResponsiveContainer>
-                            )}
-                        </div>
-                    </div>
-                    ) : null}
+                        </main>
+                     </div>
                 </div>
             </div>
         )}
@@ -1173,7 +1033,7 @@ function StrategyEditorPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="take-profit">Take Profit (%)</Label>
-                                    <Input id="take-profit" type="number" value={strategyConfig.takeProfit} onChange={e => handleConfigChange('takeProfit', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/>
+                                    <Input id="take-profit" type="number" value={strategyConfig.takeProfit} onChange={e => handleConfigChange('take-profit', parseFloat(e.target.value))} className="bg-slate-800 border-slate-700"/>
                                 </div>
                             </div>
                             <div className="flex items-center space-x-2 mt-4">
@@ -1248,5 +1108,3 @@ export default function EditorPage() {
     </Suspense>
   );
 }
-
-    
