@@ -42,7 +42,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from '@/components/ui/slider';
-import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database, Zap, CalendarIcon, History, ZoomReset } from 'lucide-react';
+import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database, Zap, CalendarIcon, History, ZoomOut } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
@@ -1088,7 +1088,7 @@ function StrategyEditorPage() {
                         <div className="flex items-center gap-2">
                             {zoomState.zoomDomain.x[0] !== 'auto' && (
                                 <Button onClick={resetZoom} variant="outline" size="sm" className="gap-2">
-                                    <ZoomReset className="h-4 w-4"/>
+                                    <ZoomOut className="h-4 w-4"/>
                                     Zoom'u Sıfırla
                                 </Button>
                             )}
