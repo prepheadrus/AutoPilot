@@ -141,7 +141,7 @@ type BacktestResult = {
     totalTrades: number;
     winRate: number;
     maxDrawdown: number;
-    profitFactor: number;
+    profitFactor: number | null;
     totalCommissions: number;
   };
 };
@@ -347,7 +347,7 @@ const runBacktestEngine = (
       totalTrades: totalTrades,
       winRate: totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0,
       maxDrawdown: maxDrawdown * 100,
-      profitFactor: totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0,
+      profitFactor: totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : null,
       totalCommissions: totalCommissions
     }
 
@@ -956,9 +956,9 @@ function StrategyEditorPage() {
                                         <p className={`text-lg font-bold ${activeBacktestResult.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{activeBacktestResult.stats.netProfit.toFixed(2)}%</p>
                                     </div>
                                     <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam İşlem</p><p className="text-lg font-bold">{activeBacktestResult.stats.totalTrades}</p></div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Başarı Oranı</p><p className="text-lg font-bold">{activeBacktestResult.stats.winRate.toFixed(1)}%</p></div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam Komisyon</p><p className="text-lg font-bold">${activeBacktestResult.stats.totalCommissions.toFixed(2)}</p></div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Kâr Faktörü</p><p className="text-lg font-bold">{isFinite(activeBacktestResult.stats.profitFactor) ? activeBacktestResult.stats.profitFactor.toFixed(2) : "∞"}</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Başarı Oranı</p><p className="text-lg font-bold">{(activeBacktestResult.stats.winRate || 0).toFixed(1)}%</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam Komisyon</p><p className="text-lg font-bold">${(activeBacktestResult.stats.totalCommissions || 0).toFixed(2)}</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Kâr Faktörü</p><p className="text-lg font-bold">{activeBacktestResult.stats.profitFactor && isFinite(activeBacktestResult.stats.profitFactor) ? activeBacktestResult.stats.profitFactor.toFixed(2) : "∞"}</p></div>
                                 </div>
                                 <div className="w-full h-full">
                                 <ResponsiveContainer width="100%" height={(hasOscillator || hasMACD) ? "70%" : "100%"}>
