@@ -42,7 +42,7 @@ export class BinanceAPI {
     this.networkType = credentials.networkType || 'mainnet';
 
     // Instantiate the exchange
-    this:ccxt.binance({
+    this.exchange = new (ccxt as any).binance({
       apiKey: credentials.apiKey,
       secret: credentials.apiSecret,
     });
