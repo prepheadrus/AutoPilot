@@ -43,7 +43,8 @@ export class BinanceAPI {
     this.networkType = credentials.networkType || (credentials.testnet ? 'spot-testnet' : 'mainnet');
 
     const isFutures = this.networkType === 'futures-testnet';
-    const isTestnet = this.networkType !== 'mainnet';
+    const isSpotTestnet = this.networkType === 'spot-testnet';
+    const isTestnet = isFutures || isSpotTestnet;
 
     const exchangeOptions: any = {
       apiKey: credentials.apiKey,
@@ -53,26 +54,26 @@ export class BinanceAPI {
       },
     };
     
-    // Explicitly set URLs for testnets to ensure correct endpoint routing,
-    // as suggested by the user's backend developer persona.
-    if (this.networkType === 'spot-testnet') {
-      exchangeOptions.urls = {
-        'api': 'https://testnet.binance.vision/api',
-      };
-    } else if (this.networkType === 'futures-testnet') {
+    // Explicitly set URLs for testnets to ensure correct endpoint routing.
+    if (isSpotTestnet) {
+      // For Spot Testnet, using sandboxMode is the most reliable way.
+      // We don't need to set the URL manually if sandboxMode is on for spot.
+    } else if (isFutures) {
+      // For Futures Testnet, sandboxMode is deprecated. We must set the URL directly.
         exchangeOptions.urls = {
-            'api': 'https://testnet.binancefuture.com/fapi',
+            'api': 'https://testnet.binancefuture.com',
         };
     }
 
     this.exchange = new (ccxt as any).binance(exchangeOptions);
 
-    // Enable sandbox mode for all testnets. This might influence other ccxt logic.
-    if (isTestnet) {
+    // IMPORTANT: Only enable sandbox mode for SPOT testnet.
+    // It is deprecated for FUTURES testnet and will cause errors.
+    if (isSpotTestnet) {
       this.exchange.setSandboxMode(true);
     }
     
-    console.log(`[BinanceAPI] Initialized for ${this.networkType}. Sandbox: ${this.exchange.sandbox}. Default Type: ${this.exchange.options.defaultType}. API URL: ${JSON.stringify(this.exchange.urls.api)}`);
+    console.log(`[BinanceAPI] Initialized for ${this.networkType}. Is Futures: ${isFutures}, Is Spot Testnet: ${isSpotTestnet}. API URL: ${JSON.stringify(this.exchange.urls.api)}`);
   }
 
   /**
@@ -187,11 +188,14 @@ export class BinanceAPI {
   async marketOrder(order: MarketOrder): Promise<BinanceOrderResponse> {
     const { symbol, side, quantity, quoteOrderQty } = order;
     
-    const amount = side === 'BUY' ? quoteOrderQty : quantity;
-    const params = side === 'BUY' ? { 'quoteOrderQty': amount } : {};
+    // For spot BUY, use quoteOrderQty; for SELL use quantity.
+    // For futures, it's always quantity.
+    const isSpotBuy = this.exchange.options.defaultType === 'spot' && side === 'BUY';
+    const amount = isSpotBuy ? quoteOrderQty : quantity;
+    const params = isSpotBuy ? { 'quoteOrderQty': amount } : {};
 
     if (!amount) {
-        throw new Error(`For a market ${side} order, you must provide ${side === 'BUY' ? 'quoteOrderQty' : 'quantity'}.`);
+        throw new Error(`For a market ${side} order, you must provide ${isSpotBuy ? 'quoteOrderQty' : 'quantity'}.`);
     }
 
     return this.exchange.createMarketOrder(symbol, side.toLowerCase() as 'buy' | 'sell', amount, undefined, params);
