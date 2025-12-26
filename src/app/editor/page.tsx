@@ -144,7 +144,7 @@ const initialStrategyConfig: BotConfig = {
 };
 
 const formatPrice = (price: number): string => {
-    if (!price) return '0.00';
+    if (!price || typeof price !== 'number') return '0.00';
     if (price >= 1) {
         return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
@@ -171,6 +171,7 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[], initialBa
     // Format incoming OHLCV data and extract prices
     const formattedOhlc = ohlcv.map(candle => ({
       time: new Date(candle[0]).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      timestamp: candle[0], // Keep original timestamp for matching
       date: new Date(candle[0]),
       open: candle[1],
       high: candle[2],
@@ -221,7 +222,7 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[], initialBa
     let entryPrice = 0;
     let portfolioValue = initialBalance;
     const pnlData = [{ time: new Date(ohlcv[0][0] - 3600*1000).toLocaleDateString('tr-TR'), pnl: portfolioValue }];
-    const trades = [];
+    const trades: {timestamp: number, type: 'buy' | 'sell', price: number}[] = [];
     let peakPortfolio = portfolioValue;
     let maxDrawdown = 0;
     let totalProfit = 0;
@@ -289,7 +290,7 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[], initialBa
             
             inPosition = true;
             entryPrice = buyPrice;
-            trades.push({ time: candle.time, type: 'buy', price: buyPrice });
+            trades.push({ timestamp: candle.timestamp, type: 'buy', price: buyPrice });
         } else if (shouldSell && inPosition) {
             const sellPrice = candle.price * (1 - SLIPPAGE_RATE);
             const profit = (sellPrice - entryPrice) / entryPrice;
@@ -308,7 +309,7 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[], initialBa
             }
 
             inPosition = false;
-            trades.push({ time: candle.time, type: 'sell', price: sellPrice });
+            trades.push({ timestamp: candle.timestamp, type: 'sell', price: sellPrice });
         }
 
         pnlData.push({ time: candle.time, pnl: portfolioValue });
@@ -356,19 +357,28 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[], initialBa
     return { ohlcData: finalChartData, tradeData: trades, pnlData, stats };
 };
 
-// Custom Shape for Scatter Markers
-const TradeMarker = (props: any) => {
+// Custom Dot for rendering trade arrows on the price line
+const TradeArrowDot = (props: any) => {
     const { cx, cy, payload } = props;
-    if (!payload || !payload.type) return null;
-    const isBuy = payload.type === 'buy';
-    const yOffset = isBuy ? 10 : -10;
-    const markerY = cy + yOffset;
-    
-    if (isBuy) {
-        return <ArrowUp x={cx - 8} y={markerY} width={16} height={16} className="text-green-500 fill-current" />;
+
+    if (!payload.tradeMarker) {
+        return null; // Don't render a dot if there's no trade
     }
-    return <ArrowDown x={cx - 8} y={markerY - 16} width={16} height={16} className="text-red-500 fill-current" />;
+
+    const isBuy = payload.tradeMarker.type === 'buy';
+    const color = isBuy ? '#22c55e' : '#ef4444'; // green-500 or red-500
+    
+    // Position arrow below for buy, above for sell
+    const yPosition = isBuy ? cy + 10 : cy - 10;
+    const arrowPoints = isBuy 
+        ? `${cx},${yPosition - 5} ${cx - 5},${yPosition + 5} ${cx + 5},${yPosition + 5}` // Up arrow
+        : `${cx},${yPosition + 5} ${cx - 5},${yPosition - 5} ${cx + 5},${yPosition - 5}`; // Down arrow
+
+    return (
+        <polygon points={arrowPoints} fill={color} stroke={color} strokeWidth="1" />
+    );
 };
+
 
 // Custom Tooltip for combined chart
 const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
@@ -745,8 +755,14 @@ function StrategyEditorPage() {
   const chartAndTradeData = useMemo(() => {
     if (!backtestResult) return [];
     
+    // Create a map of trades for efficient lookup
+    const tradesMap = new Map();
+    backtestResult.tradeData.forEach(trade => {
+        tradesMap.set(trade.timestamp, trade);
+    });
+
     return backtestResult.ohlcData.map(ohlc => {
-      const trade = backtestResult.tradeData.find(t => t.time === ohlc.time);
+      const trade = tradesMap.get(ohlc.timestamp);
       const pnl = backtestResult.pnlData.find(p => p.time === ohlc.time);
       return {
         ...ohlc,
@@ -1031,12 +1047,11 @@ function StrategyEditorPage() {
                                     
                                     <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye (Maliyetler Sonrası)" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
                                     
-                                    <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" dot={false} strokeWidth={2} />
+                                    <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
                                      {indicatorKeys.filter(k => !k.startsWith('RSI') && !k.startsWith('MACD')).map((key, index) => (
                                         <Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={["#facc15", "#38bdf8"][(index) % 2]} dot={false} strokeWidth={1.5} />
                                     ))}
                                     
-                                    <Scatter yAxisId="price" name="İşlemler" dataKey="tradeMarker.price" fill="transparent" shape={<TradeMarker />} />
                                 </ComposedChart>
                             </ResponsiveContainer>
                              {hasOscillator && !hasMACD && (
