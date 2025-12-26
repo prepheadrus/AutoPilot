@@ -382,20 +382,28 @@ const runBacktestEngine = (
 };
 
 const TradeArrowDot = ({ cx, cy, payload }: any) => {
-    if (!payload.tradeMarker) return null;
+  if (!payload || !payload.tradeMarker) {
+    return null;
+  }
 
-    const isBuy = payload.tradeMarker.type === 'buy';
-    const color = isBuy ? '#22c55e' : '#ef4444'; // green-500 or red-500
+  const isBuy = payload.tradeMarker.type === 'buy';
+  const color = isBuy ? '#22c55e' : '#ef4444'; // Tailwind green-500 and red-500
 
-    // Position arrow below for buy, above for sell
-    const yPosition = isBuy ? payload.price * 0.995 : payload.price * 1.005;
-    const yCoord = cy - (payload.price - yPosition); // Adjust cy based on price difference
+  // Position arrow slightly below for buy, slightly above for sell
+  const arrowY = isBuy ? (cy ?? 0) + 12 : (cy ?? 0) - 12;
 
-    const points = isBuy
-      ? `${cx},${yCoord + 5} ${cx - 5},${yCoord - 5} ${cx + 5},${yCoord - 5}` // Up arrow below price
-      : `${cx},${yCoord - 5} ${cx - 5},${yCoord + 5} ${cx + 5},${yCoord + 5}`; // Down arrow above price
+  const points = isBuy
+    ? `${cx},${arrowY - 6} ${cx - 5},${arrowY + 4} ${cx + 5},${arrowY + 4}` // Up arrow
+    : `${cx},${arrowY + 6} ${cx - 5},${arrowY - 4} ${cx + 5},${arrowY - 4}`; // Down arrow
 
-    return <polygon points={points} fill={color} />;
+  return (
+    <polygon
+      points={points}
+      fill={color}
+      stroke={color}
+      strokeWidth={1}
+    />
+  );
 };
 
 
