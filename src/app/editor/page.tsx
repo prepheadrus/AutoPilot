@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useCallback, useMemo, useEffect, Suspense } from 'react';
@@ -47,7 +46,7 @@ import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
 import { DataSourceNode } from '@/components/editor/nodes/DataSourceNode';
-import type { Bot, BotConfig } from '@/lib/types';
+import type { Bot, BotConfig, BacktestRun } from '@/lib/types';
 import type { TooltipProps } from 'recharts';
 import { calculateMACD } from '@/lib/indicators';
 
@@ -146,13 +145,6 @@ type BacktestResult = {
     totalCommissions: number;
   };
 };
-
-type BacktestRun = {
-    id: number;
-    params: BacktestFormValues;
-    result: BacktestResult;
-};
-
 
 const initialStrategyConfig: BotConfig = {
     mode: 'PAPER',
@@ -383,28 +375,21 @@ const runBacktestEngine = (
     return { ohlcData: finalChartData, tradeData: trades, pnlData, stats };
 };
 
-const TradeArrowDot = (props: any) => {
-    const { cx, cy, payload } = props;
-    const isBuy = payload.tradeMarker?.type === 'buy';
-    const isSell = payload.tradeMarker?.type === 'sell';
+const TradeArrowDot = ({ cx, cy, payload }: any) => {
+    if (!payload.tradeMarker) return null;
 
-    if (!isBuy && !isSell) return null;
-
+    const isBuy = payload.tradeMarker.type === 'buy';
     const color = isBuy ? '#22c55e' : '#ef4444'; // green-500 or red-500
-    
-    // Position arrow below for buy, above for sell
-    const yOffset = isBuy ? 10 : -10;
-    const finalY = cy + yOffset;
-    
-    const arrowPoints = isBuy 
-        ? `${cx},${cy - 5} ${cx - 5},${cy + 5} ${cx + 5},${cy + 5}` // Up arrow, but we position it below the line
-        : `${cx},${cy + 5} ${cx - 5},${cy - 5} ${cx + 5},${cy - 5}`; // Down arrow, positioned above the line
 
-    return (
-       <g transform={`translate(0, ${yOffset})`}>
-         <polygon points={arrowPoints} fill={color} stroke={color} strokeWidth="1" />
-       </g>
-    );
+    // Position arrow below for buy, above for sell
+    const yPosition = isBuy ? payload.price * 0.995 : payload.price * 1.005;
+    const yCoord = cy - (payload.price - yPosition); // Adjust cy based on price difference
+
+    const points = isBuy
+      ? `${cx},${yCoord + 5} ${cx - 5},${yCoord - 5} ${cx + 5},${yCoord - 5}` // Up arrow below price
+      : `${cx},${yCoord - 5} ${cx - 5},${yCoord + 5} ${cx + 5},${yCoord + 5}`; // Down arrow above price
+
+    return <polygon points={points} fill={color} />;
 };
 
 
@@ -449,12 +434,12 @@ function StrategyEditorPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isCompiling, setIsCompiling] = useState(false);
   const [isBacktesting, setIsBacktesting] = useState(false);
-  const [isBacktestModalOpen, setIsBacktestModalOpen] = useState(false);
+  const [isReportModalOpen, setReportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [strategyConfig, setStrategyConfig] = useState<BotConfig>(initialStrategyConfig);
   
   const [backtestHistory, setBacktestHistory] = useState<BacktestRun[]>([]);
-  const [selectedRun, setSelectedRun] = useState<BacktestRun | null>(null);
+  const [activeBacktestResult, setActiveBacktestResult] = useState<BacktestResult | null>(null);
   
   const [editingBotId, setEditingBotId] = useState<number | null>(null);
 
@@ -491,17 +476,41 @@ function StrategyEditorPage() {
     try {
         const storedHistory = localStorage.getItem('backtestHistory');
         if (storedHistory) {
-            setBacktestHistory(JSON.parse(storedHistory));
+            const parsedHistory: BacktestRun[] = JSON.parse(storedHistory);
+            setBacktestHistory(parsedHistory);
         }
     } catch (error) {
         console.error("Backtest geçmişi yüklenemedi:", error);
     }
-  }, []);
+    
+    // Check if we need to load a specific report from history
+    const reportId = searchParams.get('reportId');
+    if (reportId) {
+        try {
+            const storedHistory = localStorage.getItem('backtestHistory');
+            const history: BacktestRun[] = storedHistory ? JSON.parse(storedHistory) : [];
+            const reportToLoad = history.find(run => run.id === Number(reportId));
+            if (reportToLoad) {
+                setActiveBacktestResult(reportToLoad.result);
+                setNodes(reportToLoad.nodes || initialNodes);
+                setEdges(reportToLoad.edges || initialEdges);
+                setReportModalOpen(true);
+            } else {
+                toast({ title: "Rapor Bulunamadı", description: "Geçmiş testler arasında bu rapor bulunamadı.", variant: "destructive" });
+            }
+        } catch (error) {
+            toast({ title: "Hata", description: "Rapor yüklenirken bir sorun oluştu.", variant: "destructive" });
+        }
+    }
+
+  }, [searchParams, toast, setNodes, setEdges]);
 
   // Save history to localStorage whenever it changes
   useEffect(() => {
     try {
-        localStorage.setItem('backtestHistory', JSON.stringify(backtestHistory));
+        if(backtestHistory.length > 0) {
+           localStorage.setItem('backtestHistory', JSON.stringify(backtestHistory));
+        }
     } catch (error) {
         console.error("Backtest geçmişi kaydedilemedi:", error);
     }
@@ -511,6 +520,10 @@ function StrategyEditorPage() {
   useEffect(() => {
     const symbol = searchParams.get('symbol');
     const editBotId = searchParams.get('editBotId');
+    const reportId = searchParams.get('reportId');
+
+    // Prevent loading bot data if a report is being viewed
+    if (reportId) return;
 
     if (editBotId) {
         try {
@@ -744,7 +757,7 @@ function StrategyEditorPage() {
   
   const handleRunBacktest = async (values: BacktestFormValues) => {
     setIsBacktesting(true);
-    setSelectedRun(null); // Clear previous results to show loading state
+    setActiveBacktestResult(null); // Clear previous results to show loading state
     toast({ title: "Backtest Başlatıldı", description: "Geçmiş veriler çekiliyor ve strateji simüle ediliyor..." });
 
     try {
@@ -771,11 +784,13 @@ function StrategyEditorPage() {
         const newRun: BacktestRun = {
             id: Date.now(),
             params: values,
-            result: result
+            result: result,
+            nodes,
+            edges
         };
 
-        setBacktestHistory(prev => [newRun, ...prev].slice(0, 20)); // Keep last 20 runs
-        setSelectedRun(newRun);
+        setBacktestHistory(prev => [newRun, ...prev].slice(0, 50)); // Keep last 50 runs
+        setActiveBacktestResult(result);
 
     } catch (error) {
         console.error("Backtest sırasında hata:", error);
@@ -785,7 +800,10 @@ function StrategyEditorPage() {
             description: errorMessage,
             variant: 'destructive',
         });
+        // Ensure modal closes or shows an error state, not loading forever
+        setIsBacktesting(false);
     } finally {
+        // This will now happen only on success, letting error handle its state
         setIsBacktesting(false);
     }
   }
@@ -794,31 +812,41 @@ function StrategyEditorPage() {
     setStrategyConfig(prev => ({...prev, [field]: value}));
   }
   
-  const backtestResult = selectedRun?.result;
+  const openBacktestModal = () => {
+    setActiveBacktestResult(null);
+    setReportModalOpen(true);
+  }
+
+  const closeReportModal = () => {
+    setReportModalOpen(false);
+    setActiveBacktestResult(null);
+    // Clear the reportId from URL to prevent re-opening on refresh
+    router.replace('/editor', { scroll: false });
+  }
 
   const chartAndTradeData = useMemo(() => {
-    if (!backtestResult) return [];
+    if (!activeBacktestResult) return [];
     
     // Create a map of trades for efficient lookup
     const tradesMap = new Map();
-    backtestResult.tradeData.forEach(trade => {
+    activeBacktestResult.tradeData.forEach(trade => {
         tradesMap.set(trade.timestamp, trade);
     });
 
-    return backtestResult.ohlcData.map(ohlc => {
+    return activeBacktestResult.ohlcData.map(ohlc => {
         const trade = tradesMap.get(ohlc.timestamp);
         return {
             ...ohlc,
             tradeMarker: trade || null,
         };
     });
-  }, [backtestResult]);
+  }, [activeBacktestResult]);
   
   const indicatorKeys = useMemo(() => {
-    if (!backtestResult || chartAndTradeData.length === 0) return [];
+    if (!activeBacktestResult || chartAndTradeData.length === 0) return [];
     const firstDataPoint = chartAndTradeData[0];
     return Object.keys(firstDataPoint).filter(key => key.includes('('));
-  }, [backtestResult, chartAndTradeData]);
+  }, [activeBacktestResult, chartAndTradeData]);
   
   const hasOscillator = useMemo(() => {
     return indicatorKeys.some(key => key.startsWith('RSI'));
@@ -827,16 +855,6 @@ function StrategyEditorPage() {
   const hasMACD = useMemo(() => {
     return indicatorKeys.some(key => key.startsWith('MACD'));
   }, [indicatorKeys]);
-
-  const openBacktestModal = () => {
-    setSelectedRun(null);
-    setIsBacktestModalOpen(true);
-  }
-
-  const closeBacktestModal = () => {
-    setIsBacktestModalOpen(false);
-    setSelectedRun(null);
-  }
 
 
   return (
@@ -895,55 +913,34 @@ function StrategyEditorPage() {
             </div>
         </main>
         
-        {isBacktestModalOpen && (
+        {isReportModalOpen && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
                 <div className="w-[90vw] h-[90vh] flex flex-col rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
                     <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0">
                         <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu</h2>
-                        <Button variant="ghost" size="icon" onClick={closeBacktestModal}>
+                        <Button variant="ghost" size="icon" onClick={closeReportModal}>
                             <XIcon className="h-5 w-5"/>
                         </Button>
                     </div>
                      <div className="flex flex-1 min-h-0">
-                        <aside className="w-64 flex-shrink-0 border-r border-slate-800 p-4 flex flex-col gap-4">
-                            {!backtestResult && !isBacktesting ? (
-                                <div className="flex flex-col gap-6 overflow-y-auto">
-                                    <h3 className="font-semibold text-lg flex items-center gap-2"><Settings className="h-5 w-5" />Backtest Ayarları</h3>
-                                    <Form {...form}>
-                                        <form onSubmit={form.handleSubmit(handleRunBacktest)} className="space-y-6">
-                                            <FormField control={form.control} name="symbol" render={({ field }) => (<FormItem><FormLabel>İşlem Çifti</FormLabel><FormControl><Input {...field} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)} />
-                                            <FormField control={form.control} name="timeframe" render={({ field }) => (<FormItem><FormLabel>Zaman Dilimi</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="bg-slate-800 border-slate-700"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="1m">1 Dakika</SelectItem><SelectItem value="5m">5 Dakika</SelectItem><SelectItem value="15m">15 Dakika</SelectItem><SelectItem value="1h">1 Saat</SelectItem><SelectItem value="4h">4 Saat</SelectItem><SelectItem value="1d">1 Gün</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
-                                            <FormField control={form.control} name="dateRange" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Tarih Aralığı</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal bg-slate-800 border-slate-700 hover:bg-slate-700", !field.value && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{field.value?.from ? (field.value.to ? (<>{format(field.value.from, "LLL dd, y")} - {format(field.value.to, "LLL dd, y")}</>) : (format(field.value.from, "LLL dd, y"))) : (<span>Tarih seçin</span>)}</Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={field.value.from} selected={field.value} onSelect={field.onChange} numberOfMonths={2}/></PopoverContent></Popover><FormMessage /></FormItem>)} />
-                                            <FormField control={form.control} name="initialBalance" render={({ field }) => (<FormItem><FormLabel>Bakiye (USDT)</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <FormField control={form.control} name="commission" render={({ field }) => (<FormItem><FormLabel>Komisyon (%)</FormLabel><FormControl><Input type="number" step="0.001" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
-                                                <FormField control={form.control} name="slippage" render={({ field }) => (<FormItem><FormLabel>Kayma (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
-                                            </div>
-                                            <Button type="submit" className="w-full" disabled={isBacktesting}>Backtest'i Başlat</Button>
-                                        </form>
-                                    </Form>
-                                </div>
-                            ) : (
-                                <>
-                                    <h3 className="font-semibold text-lg flex items-center gap-2"><History className="h-5 w-5" />Geçmiş Testler</h3>
-                                    <div className="flex-1 overflow-y-auto -mr-4 pr-3 space-y-2">
-                                        {backtestHistory.length === 0 && !isBacktesting && <p className="text-sm text-muted-foreground text-center py-8">Henüz test yapılmadı.</p>}
-                                        {isBacktesting && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin"/><span>Test çalışıyor...</span></div>}
-                                        {backtestHistory.map(run => (
-                                            <button key={run.id} onClick={() => setSelectedRun(run)} className={cn("w-full text-left p-2 rounded-md hover:bg-slate-800 transition-colors border", selectedRun?.id === run.id ? "bg-slate-800 border-primary/50" : "bg-slate-800/50 border-transparent")}>
-                                                <div className="flex justify-between items-center text-sm font-semibold">
-                                                    <span>{run.params.symbol}</span>
-                                                    <span className={cn(run.result.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400')}>
-                                                        {run.result.stats.netProfit.toFixed(2)}%
-                                                    </span>
-                                                </div>
-                                                <p className="text-xs text-muted-foreground">{run.params.timeframe} - {format(new Date(run.params.dateRange.from), "MMM d, yy")} - {format(new Date(run.params.dateRange.to), "MMM d, yy")}</p>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
-                        </aside>
+                        {!activeBacktestResult && !isBacktesting ? (
+                           <div className="p-6 w-full max-w-md mx-auto">
+                                <h3 className="font-semibold text-lg flex items-center gap-2 mb-6"><Settings className="h-5 w-5" />Backtest Ayarları</h3>
+                                <Form {...form}>
+                                    <form onSubmit={form.handleSubmit(handleRunBacktest)} className="space-y-6">
+                                        <FormField control={form.control} name="symbol" render={({ field }) => (<FormItem><FormLabel>İşlem Çifti</FormLabel><FormControl><Input {...field} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)} />
+                                        <FormField control={form.control} name="timeframe" render={({ field }) => (<FormItem><FormLabel>Zaman Dilimi</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="bg-slate-800 border-slate-700"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="1m">1 Dakika</SelectItem><SelectItem value="5m">5 Dakika</SelectItem><SelectItem value="15m">15 Dakika</SelectItem><SelectItem value="1h">1 Saat</SelectItem><SelectItem value="4h">4 Saat</SelectItem><SelectItem value="1d">1 Gün</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                                        <FormField control={form.control} name="dateRange" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Tarih Aralığı</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal bg-slate-800 border-slate-700 hover:bg-slate-700", !field.value && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{field.value?.from ? (field.value.to ? (<>{format(field.value.from, "LLL dd, y")} - {format(field.value.to, "LLL dd, y")}</>) : (format(field.value.from, "LLL dd, y"))) : (<span>Tarih seçin</span>)}</Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={field.value.from} selected={field.value} onSelect={field.onChange} numberOfMonths={2}/></PopoverContent></Popover><FormMessage /></FormItem>)} />
+                                        <FormField control={form.control} name="initialBalance" render={({ field }) => (<FormItem><FormLabel>Bakiye (USDT)</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <FormField control={form.control} name="commission" render={({ field }) => (<FormItem><FormLabel>Komisyon (%)</FormLabel><FormControl><Input type="number" step="0.001" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
+                                            <FormField control={form.control} name="slippage" render={({ field }) => (<FormItem><FormLabel>Kayma (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
+                                        </div>
+                                        <Button type="submit" className="w-full" disabled={isBacktesting}>Backtest'i Başlat</Button>
+                                    </form>
+                                </Form>
+                           </div>
+                        ) : (
                         <main className="flex-1 min-h-0">
                             {isBacktesting ? (
                                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
@@ -951,17 +948,17 @@ function StrategyEditorPage() {
                                 <h3 className="text-xl font-semibold">Backtest Çalıştırılıyor...</h3>
                                 <p className="text-slate-500 mt-2">Geçmiş veriler çekiliyor ve stratejiniz simüle ediliyor. Lütfen bekleyin.</p>
                                 </div>
-                            ) : backtestResult ? (
+                            ) : activeBacktestResult ? (
                             <div className="p-4 md:p-6 flex-1 min-h-0 grid grid-rows-[auto,1fr] gap-6 h-full">
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                                     <div className="rounded-lg bg-slate-800/50 p-3">
                                         <p className="text-xs text-slate-400">Net Kâr</p>
-                                        <p className={`text-lg font-bold ${backtestResult.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{backtestResult.stats.netProfit.toFixed(2)}%</p>
+                                        <p className={`text-lg font-bold ${activeBacktestResult.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{activeBacktestResult.stats.netProfit.toFixed(2)}%</p>
                                     </div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam İşlem</p><p className="text-lg font-bold">{backtestResult.stats.totalTrades}</p></div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Başarı Oranı</p><p className="text-lg font-bold">{backtestResult.stats.winRate.toFixed(1)}%</p></div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam Komisyon</p><p className="text-lg font-bold">${backtestResult.stats.totalCommissions.toFixed(2)}</p></div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Kâr Faktörü</p><p className="text-lg font-bold">{isFinite(backtestResult.stats.profitFactor) ? backtestResult.stats.profitFactor.toFixed(2) : "∞"}</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam İşlem</p><p className="text-lg font-bold">{activeBacktestResult.stats.totalTrades}</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Başarı Oranı</p><p className="text-lg font-bold">{activeBacktestResult.stats.winRate.toFixed(1)}%</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam Komisyon</p><p className="text-lg font-bold">${activeBacktestResult.stats.totalCommissions.toFixed(2)}</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Kâr Faktörü</p><p className="text-lg font-bold">{isFinite(activeBacktestResult.stats.profitFactor) ? activeBacktestResult.stats.profitFactor.toFixed(2) : "∞"}</p></div>
                                 </div>
                                 <div className="w-full h-full">
                                 <ResponsiveContainer width="100%" height={(hasOscillator || hasMACD) ? "70%" : "100%"}>
@@ -989,6 +986,7 @@ function StrategyEditorPage() {
                                 </div>
                             )}
                         </main>
+                        )}
                      </div>
                 </div>
             </div>

@@ -12,6 +12,7 @@ import {
   User,
   Menu,
   CandlestickChart,
+  History,
 } from "lucide-react";
 import Link from "next/link";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
@@ -26,9 +27,10 @@ import { SidebarProvider } from "./ui/sidebar";
 
 const navItems = [
   { href: "/", label: "Özet Panel", icon: LayoutDashboard },
+  { href: "/market", label: "Piyasa Analizi", icon: CandlestickChart },
   { href: "/editor", label: "Strateji Editörü", icon: Share2 },
   { href: "/bot-status", label: "Bot Yönetimi", icon: Bot },
-  { href: "/market", label: "Piyasa Analizi", icon: CandlestickChart },
+  { href: "/backtest-history", label: "Backtest Geçmişi", icon: History },
   { href: "/settings", label: "Ayarlar", icon: Settings },
 ];
 
