@@ -48,12 +48,16 @@ export class BinanceAPI {
 
     if (this.networkType === 'futures-testnet') {
         console.log('[BinanceAPI] Configuring for Futures Testnet (demo-fapi.binance.com)');
+        // Critical Fix: DO NOT use setSandboxMode. Instead, set the URLs directly in the options.
+        // The `urls.api` should be an object for ccxt to correctly route fapi calls.
         exchangeOptions.options = {
             'defaultType': 'future',
         };
-        // This is the key change: Set the specific API endpoint for futures testnet
         exchangeOptions.urls = {
-            'api': 'https://demo-fapi.binance.com'
+            'api': {
+                'fapiPublic': 'https://demo-fapi.binance.com/fapi/v1',
+                'fapiPrivate': 'https://demo-fapi.binance.com/fapi/v2',
+            }
         };
     } else {
         console.log('[BinanceAPI] Configuring for Mainnet (Spot)');
@@ -90,7 +94,7 @@ export class BinanceAPI {
       
       let accountInfo: any;
       if (this.networkType === 'futures-testnet') {
-          // /fapi/v2/account for futures
+          // /fapi/v2/account for futures - CCXT handles this call correctly
           accountInfo = await this.exchange.fapiPrivateGetAccount();
       } else {
           // /api/v3/account for spot

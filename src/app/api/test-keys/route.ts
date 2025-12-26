@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     if (error instanceof ccxt.AuthenticationError) {
         errorMessage = `Kimlik doğrulama hatası: ${error.message}. Lütfen API anahtarınızın doğru izinlere (özellikle Spot veya Futures için) sahip olduğundan ve IP kısıtlaması varsa sunucu IP'sinin eklendiğinden emin olun.`;
     } else if (typeof errorMessage === 'string' && (errorMessage.includes('-2015') || errorMessage.includes('Invalid API-key'))) {
-      errorMessage = "Kimlik doğrulama hatası (Kod: -2015). Lütfen API anahtarınızın doğru izinlere (özellikle Spot veya Futures için) sahip olduğundan ve IP kısıtlaması varsa sunucu IP'sinin eklendiğinden emin olun.";
+      errorMessage = "Kimlik doğrulama hatası (Kod: -2015). Lütfen API anahtarınızın doğru izinlere sahip olduğundan ve IP kısıtlaması varsa sunucu IP'sinin eklendiğinden emin olun.";
     } else if (typeof errorMessage === 'string' && errorMessage.includes('-2008')) {
         errorMessage = `Geçersiz API Anahtarı (Kod: -2008). Lütfen girdiğiniz anahtarın doğru olduğundan emin olun.`
     }
