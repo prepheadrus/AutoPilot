@@ -30,6 +30,7 @@ import {
   ReferenceLine,
   Bar,
   Cell,
+  ReferenceArea,
 } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { RSI as RSICalculator, SMA as SMACalculator } from 'technicalindicators';
@@ -41,7 +42,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from '@/components/ui/slider';
-import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database, Zap, CalendarIcon, History } from 'lucide-react';
+import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database, Zap, CalendarIcon, History, ZoomReset } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
@@ -390,19 +391,23 @@ const TradeArrowDot = ({ cx, cy, payload }: any) => {
   const color = isBuy ? '#22c55e' : '#ef4444'; // Tailwind green-500 and red-500
 
   // Position arrow slightly below for buy, slightly above for sell
-  const arrowY = isBuy ? (cy ?? 0) + 12 : (cy ?? 0) - 12;
+  const arrowY = isBuy ? (cy ?? 0) + 15 : (cy ?? 0) - 15;
+  const finalCX = cx ?? 0;
 
   const points = isBuy
-    ? `${cx},${arrowY - 6} ${cx - 5},${arrowY + 4} ${cx + 5},${arrowY + 4}` // Up arrow
-    : `${cx},${arrowY + 6} ${cx - 5},${arrowY - 4} ${cx + 5},${arrowY - 4}`; // Down arrow
+    ? `${finalCX},${arrowY - 7} ${finalCX - 6},${arrowY + 3} ${finalCX + 6},${arrowY + 3}` // Up arrow
+    : `${finalCX},${arrowY + 7} ${finalCX - 6},${arrowY - 3} ${finalCX + 6},${arrowY - 3}`; // Down arrow
 
   return (
-    <polygon
-      points={points}
-      fill={color}
-      stroke={color}
-      strokeWidth={1}
-    />
+    <g>
+      <polygon
+        points={points}
+        fill={color}
+        stroke="#000"
+        strokeWidth={0.5}
+        style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.5))' }}
+      />
+    </g>
   );
 };
 
@@ -443,6 +448,21 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
 
 const proOptions = { hideAttribution: true };
 
+// --- ZOOM ---
+const initialZoomState = {
+  refAreaLeft: "",
+  refAreaRight: "",
+  zoomDomain: {
+    x: ['auto', 'auto'],
+    yPrice: ['auto', 'auto'],
+    yPnl: ['auto', 'auto'],
+    yIndicator: ['auto', 'auto'],
+    yMacd: ['auto', 'auto'],
+  },
+};
+// --- ZOOM ---
+
+
 function StrategyEditorPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -457,6 +477,11 @@ function StrategyEditorPage() {
   const activeBacktestResult = activeBacktestRun?.result || null;
   
   const [editingBotId, setEditingBotId] = useState<number | null>(null);
+  
+  // --- ZOOM STATE ---
+  const [zoomState, setZoomState] = useState(initialZoomState);
+  const [isZooming, setIsZooming] = useState(false);
+  // --- ZOOM STATE ---
 
   const { toast } = useToast();
   const router = useRouter();
@@ -773,6 +798,7 @@ function StrategyEditorPage() {
     const handleRunBacktest = async (values: BacktestFormValues) => {
         setBacktestProgress({ loaded: 0, total: 0, message: "Başlatılıyor..." });
         setActiveBacktestRun(null);
+        setZoomState(initialZoomState); // Reset zoom on new backtest
         toast({ title: "Backtest Başlatıldı", description: "Geçmiş veriler çekiliyor ve strateji simüle ediliyor..." });
 
         const allCandles: any[] = [];
@@ -888,12 +914,14 @@ function StrategyEditorPage() {
     setReportModalOpen(false);
     setActiveBacktestRun(null);
     setBacktestProgress(null);
+    setZoomState(initialZoomState); // Reset zoom on close
     // Clear the reportId from URL to prevent re-opening on refresh
     router.replace('/editor', { scroll: false });
   }
 
   const handleSelectHistoryRun = (run: BacktestRun) => {
     setActiveBacktestRun(run);
+    setZoomState(initialZoomState); // Reset zoom when changing report
     // You might want to update nodes/edges here if the strategy was different
     // setNodes(run.nodes);
     // setEdges(run.edges);
@@ -929,6 +957,71 @@ function StrategyEditorPage() {
   const hasMACD = useMemo(() => {
     return indicatorKeys.some(key => key.startsWith('MACD'));
   }, [indicatorKeys]);
+
+
+  // --- ZOOM HANDLERS ---
+  const handleZoomMouseDown = (e: any) => {
+    if (!e || !e.activeLabel) return;
+    setIsZooming(true);
+    setZoomState((prev) => ({
+      ...prev,
+      refAreaLeft: e.activeLabel,
+    }));
+  };
+
+  const handleZoomMouseMove = (e: any) => {
+    if (isZooming && e && e.activeLabel) {
+      setZoomState((prev) => ({
+        ...prev,
+        refAreaRight: e.activeLabel,
+      }));
+    }
+  };
+
+  const handleZoomMouseUp = () => {
+    setIsZooming(false);
+    const { refAreaLeft, refAreaRight } = zoomState;
+
+    if (refAreaLeft && refAreaRight && refAreaLeft !== refAreaRight) {
+        const [left, right] = [refAreaLeft, refAreaRight].sort();
+        const data = chartAndTradeData;
+        const leftIndex = data.findIndex(d => d.time === left);
+        const rightIndex = data.findIndex(d => d.time === right);
+        
+        if (leftIndex > -1 && rightIndex > -1) {
+            const priceSlice = data.slice(leftIndex, rightIndex + 1).map(d => d.price);
+            const pnlSlice = data.slice(leftIndex, rightIndex + 1).map(d => d.pnl);
+            
+            setZoomState((prev) => ({
+                refAreaLeft: "",
+                refAreaRight: "",
+                zoomDomain: {
+                    x: [left, right],
+                    yPrice: [Math.min(...priceSlice), Math.max(...priceSlice)],
+                    yPnl: [Math.min(...pnlSlice), Math.max(...pnlSlice)],
+                    yIndicator: ['auto', 'auto'],
+                    yMacd: ['auto', 'auto'],
+                }
+            }));
+        }
+    } else {
+        // If it was just a click, not a drag, reset areas
+         setZoomState((prev) => ({
+            ...prev,
+            refAreaLeft: "",
+            refAreaRight: "",
+        }));
+    }
+  };
+  
+  const resetZoom = useCallback(() => {
+    setZoomState(initialZoomState);
+  }, []);
+
+  const handleChartDoubleClick = () => {
+    resetZoom();
+  };
+  // --- ZOOM HANDLERS ---
 
 
   return (
@@ -992,9 +1085,17 @@ function StrategyEditorPage() {
                 <div className="w-[95vw] h-[95vh] flex flex-col rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
                     <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0">
                         <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu</h2>
-                        <Button variant="ghost" size="icon" onClick={closeReportModal}>
-                            <XIcon className="h-5 w-5"/>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            {zoomState.zoomDomain.x[0] !== 'auto' && (
+                                <Button onClick={resetZoom} variant="outline" size="sm" className="gap-2">
+                                    <ZoomReset className="h-4 w-4"/>
+                                    Zoom'u Sıfırla
+                                </Button>
+                            )}
+                            <Button variant="ghost" size="icon" onClick={closeReportModal}>
+                                <XIcon className="h-5 w-5"/>
+                            </Button>
+                        </div>
                     </div>
                      <div className="flex flex-1 min-h-0">
                          <aside className="w-72 border-r border-slate-800 flex flex-col">
@@ -1063,22 +1164,32 @@ function StrategyEditorPage() {
                                     <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam Komisyon</p><p className="text-lg font-bold">${(activeBacktestResult.stats.totalCommissions || 0).toFixed(2)}</p></div>
                                     <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Kâr Faktörü</p><p className="text-lg font-bold">{activeBacktestResult.stats.profitFactor && isFinite(activeBacktestResult.stats.profitFactor) ? activeBacktestResult.stats.profitFactor.toFixed(2) : "∞"}</p></div>
                                 </div>
-                                <div className="w-full h-full">
+                                <div className="w-full h-full cursor-crosshair" onDoubleClick={handleChartDoubleClick}>
                                 <ResponsiveContainer width="100%" height={(hasOscillator || hasMACD) ? "70%" : "100%"}>
-                                    <ComposedChart data={chartAndTradeData} syncId="backtestChart">
+                                    <ComposedChart 
+                                        data={chartAndTradeData} 
+                                        syncId="backtestChart"
+                                        onMouseDown={handleZoomMouseDown}
+                                        onMouseMove={handleZoomMouseMove}
+                                        onMouseUp={handleZoomMouseUp}
+                                        >
                                         <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
-                                        <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/><XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                        <YAxis yAxisId="pnl" orientation="left" domain={['auto', 'auto']} tickFormatter={(val: number) => `$${val.toLocaleString()}`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" />
-                                        <YAxis yAxisId="price" orientation="right" domain={['dataMin * 0.98', 'dataMax * 1.02']} tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
+                                        <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
+                                        <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" domain={zoomState.zoomDomain.x} allowDataOverflow />
+                                        <YAxis yAxisId="pnl" orientation="left" domain={zoomState.zoomDomain.yPnl} allowDataOverflow tickFormatter={(val: number) => `$${val.toLocaleString()}`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" />
+                                        <YAxis yAxisId="price" orientation="right" domain={zoomState.zoomDomain.yPrice} allowDataOverflow tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
                                         <Tooltip content={<CustomTooltip />} />
                                         <Legend wrapperStyle={{ paddingTop: '20px' }} />
                                         <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye (Maliyetler Sonrası)" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
                                         <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
                                         {indicatorKeys.filter(k => !k.startsWith('RSI') && !k.startsWith('MACD')).map((key, index) => (<Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={["#facc15", "#38bdf8"][(index) % 2]} dot={false} strokeWidth={1.5} />))}
+                                        {zoomState.refAreaLeft && zoomState.refAreaRight && (
+                                            <ReferenceArea yAxisId="price" x1={zoomState.refAreaLeft} x2={zoomState.refAreaRight} strokeOpacity={0.3} />
+                                        )}
                                     </ComposedChart>
                                 </ResponsiveContainer>
-                                {hasOscillator && !hasMACD && (<ResponsiveContainer width="100%" height="30%"><ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}><CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/><XAxis dataKey="time" hide={true}/><YAxis yAxisId="indicator" orientation="right" domain={[0, 100]} tickCount={4} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" /><Tooltip content={<CustomTooltip />} /><ReferenceLine yAxisId="indicator" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" /><ReferenceLine yAxisId="indicator" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />{indicatorKeys.filter(k => k.startsWith('RSI')).map((key, index) => (<Line key={key} yAxisId="indicator" type="monotone" dataKey={key} stroke={["#eab308", "#3b82f6"][index % 2]} fillOpacity={0.2} name={key} dot={false}/>))}</ComposedChart></ResponsiveContainer>)}
-                                {hasMACD && (<ResponsiveContainer width="100%" height="30%"><ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}><CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/><XAxis dataKey="time" hide={true}/><YAxis yAxisId="macd" orientation="right" domain={['auto', 'auto']} tickCount={5} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" /><Tooltip content={<CustomTooltip />} /><ReferenceLine yAxisId="macd" y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />{indicatorKeys.filter(k => k.includes('_Hist')).map((key) => (<Bar key={key} yAxisId="macd" dataKey={key} name="Histogram" >{chartAndTradeData.map((entry, i) => (<Cell key={`cell-${i}`} fill={(entry[key] ?? 0) > 0 ? '#22c55e' : '#ef4444'} />))}</Bar>))}{indicatorKeys.filter(k => k.includes('_MACD')).map((key) => (<Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="MACD" stroke="#3b82f6" dot={false}/>))}{indicatorKeys.filter(k => k.includes('_Signal')).map((key) => (<Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="Signal" stroke="#f97316" dot={false}/>))}</ComposedChart></ResponsiveContainer>)}
+                                {hasOscillator && !hasMACD && (<ResponsiveContainer width="100%" height="30%"><ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}><CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/><XAxis dataKey="time" hide={true} domain={zoomState.zoomDomain.x} allowDataOverflow /><YAxis yAxisId="indicator" orientation="right" domain={zoomState.zoomDomain.yIndicator} allowDataOverflow tickCount={4} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" /><Tooltip content={<CustomTooltip />} /><ReferenceLine yAxisId="indicator" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" /><ReferenceLine yAxisId="indicator" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />{indicatorKeys.filter(k => k.startsWith('RSI')).map((key, index) => (<Line key={key} yAxisId="indicator" type="monotone" dataKey={key} stroke={["#eab308", "#3b82f6"][index % 2]} fillOpacity={0.2} name={key} dot={false}/>))}</ComposedChart></ResponsiveContainer>)}
+                                {hasMACD && (<ResponsiveContainer width="100%" height="30%"><ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}><CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/><XAxis dataKey="time" hide={true} domain={zoomState.zoomDomain.x} allowDataOverflow /><YAxis yAxisId="macd" orientation="right" domain={zoomState.zoomDomain.yMacd} allowDataOverflow tickCount={5} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" /><Tooltip content={<CustomTooltip />} /><ReferenceLine yAxisId="macd" y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />{indicatorKeys.filter(k => k.includes('_Hist')).map((key) => (<Bar key={key} yAxisId="macd" dataKey={key} name="Histogram" >{chartAndTradeData.map((entry, i) => (<Cell key={`cell-${i}`} fill={(entry[key] ?? 0) > 0 ? '#22c55e' : '#ef4444'} />))}</Bar>))}{indicatorKeys.filter(k => k.includes('_MACD')).map((key) => (<Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="MACD" stroke="#3b82f6" dot={false}/>))}{indicatorKeys.filter(k => k.includes('_Signal')).map((key) => (<Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="Signal" stroke="#f97316" dot={false}/>))}</ComposedChart></ResponsiveContainer>)}
                                 </div>
                             </div>
                             ) : (
