@@ -9,7 +9,6 @@ export type NetworkType = 'mainnet' | 'futures-testnet';
 export interface BinanceCredentials {
   apiKey: string;
   apiSecret: string;
-  testnet?: boolean; // Backwards compatibility
   networkType?: NetworkType;
 }
 
@@ -32,8 +31,6 @@ export interface AccountInfo extends ccxt.Account {}
 
 /**
  * Binance API Client powered by CCXT
- * This class is designed to interact with Binance's Mainnet and Futures Testnet
- * by leveraging ccxt's built-in sandbox and market type options.
  */
 export class BinanceAPI {
   private exchange: Exchange;
@@ -42,28 +39,27 @@ export class BinanceAPI {
   constructor(credentials: BinanceCredentials) {
     this.networkType = credentials.networkType || 'mainnet';
 
-    const isFutures = this.networkType === 'futures-testnet';
-    console.log(`[BinanceAPI] Initializing for network: ${this.networkType}`);
-
     const exchangeOptions: any = {
       apiKey: credentials.apiKey,
       secret: credentials.apiSecret,
-      options: {
-        defaultType: isFutures ? 'future' : 'spot',
-      },
     };
     
+    console.log(`[BinanceAPI] Initializing for network: ${this.networkType}`);
+
     this.exchange = new (ccxt as any).binance(exchangeOptions);
 
-    if (isFutures) {
-      console.log('[BinanceAPI] Setting direct URL for Futures Testnet to demo-fapi.binance.com.');
-      // CCXT expects an object for urls.api, not a string.
+    if (this.networkType === 'futures-testnet') {
+      console.log('[BinanceAPI] Configuring for Futures Testnet (demo-fapi.binance.com)');
+      this.exchange.options['defaultType'] = 'future';
       this.exchange.urls['api'] = {
         'public': 'https://demo-fapi.binance.com/fapi/v1',
         'private': 'https://demo-fapi.binance.com/fapi/v1',
         'fapiPublic': 'https://demo-fapi.binance.com/fapi/v1',
         'fapiPrivate': 'https://demo-fapi.binance.com/fapi/v1',
       };
+    } else {
+        console.log('[BinanceAPI] Configuring for Mainnet (Spot)');
+        this.exchange.options['defaultType'] = 'spot';
     }
     
     console.log(`[BinanceAPI] CCXT Initialized. Final API URL: ${JSON.stringify(this.exchange.urls.api)}`);
@@ -79,15 +75,8 @@ export class BinanceAPI {
       return true;
     } catch (error: any) {
       console.error(`[BinanceAPI] Ping failed on ${this.networkType}:`, error.message);
-      throw error; // Re-throw to be caught by the caller
+      throw error;
     }
-  }
-
-  /**
-   * Get server time
-   */
-  async getServerTime(): Promise<number> {
-    return this.exchange.fetchTime();
   }
 
   /**
@@ -118,18 +107,19 @@ export class BinanceAPI {
   async getAccountInfo(): Promise<AccountInfo> {
     try {
         console.log(`[BinanceAPI] Fetching account info for ${this.networkType}...`);
-        const isFutures = this.networkType === 'futures-testnet';
-        const balanceInfo = isFutures
-            ? await this.exchange.fetchBalance({type: 'future'}) 
-            : await this.exchange.fetchBalance();
-
-        const info = balanceInfo.info || {};
         
+        // This is the core fix: Instead of fetchBalance which might call /sapi,
+        // we use a more direct and universally supported endpoint for validation.
+        let info;
+        if (this.networkType === 'futures-testnet') {
+            info = await this.exchange.fapiPrivateGetAccount();
+        } else {
+            // For mainnet spot
+            info = await this.exchange.privateGetAccount();
+        }
+
         return {
-            ...balanceInfo,
-            canTrade: info.canTrade,
-            canWithdraw: info.canWithdraw,
-            canDeposit: info.canDeposit,
+            ...info, // Directly return the info from the account endpoint
         } as AccountInfo;
 
     } catch(error) {
@@ -139,48 +129,6 @@ export class BinanceAPI {
         }
         throw error;
     }
-  }
-
-  /**
-   * Get account balances
-   */
-  async getBalances(): Promise<AccountBalance[]> {
-    const balance = await this.getAccountInfo();
-    return Object.entries(balance.total)
-        .filter(([, total]) => total && total > 0)
-        .map(([asset, total]) => ({
-            asset,
-            free: balance.free[asset]?.toString() || '0',
-            used: balance.used[asset]?.toString() || '0',
-            total: total.toString(),
-        })) as unknown as AccountBalance[];
-  }
-
-  /**
-   * Get balance for a specific asset
-   */
-  async getBalance(asset: string): Promise<AccountBalance | null> {
-    const balances = await this.getAccountInfo();
-    if (balances.total && balances.total[asset]) {
-      return {
-        asset,
-        free: balances.free[asset]?.toString() || '0',
-        used: balances.used[asset]?.toString() || '0',
-        total: balances.total[asset].toString(),
-      } as unknown as AccountBalance;
-    }
-    return null;
-  }
-
-  /**
-   * Get current price for a symbol
-   */
-  async getPrice(symbol: string): Promise<number> {
-    const ticker = await this.exchange.fetchTicker(symbol);
-    if (!ticker.last) {
-      throw new Error(`Could not fetch price for ${symbol}`);
-    }
-    return ticker.last;
   }
 
   /**
@@ -210,23 +158,9 @@ export class BinanceAPI {
      if (!quantity) throw new Error("Limit orders require a 'quantity'");
      return this.exchange.createLimitOrder(symbol, side.toLowerCase() as 'buy' | 'sell', quantity, price);
   }
-
-  /**
-   * Cancel an order
-   */
-  async cancelOrder(symbol: string, orderId: string): Promise<any> {
-    return this.exchange.cancelOrder(orderId, symbol);
-  }
-
-  /**
-   * Get open orders for a symbol
-   */
-  async getOpenOrders(symbol?: string): Promise<ccxt.Order[]> {
-    return this.exchange.fetchOpenOrders(symbol);
-  }
 }
 
-export async function createBinanceClient(testnet: boolean = false): Promise<BinanceAPI | null> {
+export async function createBinanceClient(networkType: NetworkType = 'mainnet'): Promise<BinanceAPI | null> {
   if (typeof window === 'undefined') {
     return null;
   }
@@ -238,16 +172,16 @@ export async function createBinanceClient(testnet: boolean = false): Promise<Bin
     const keys = JSON.parse(stored);
     
     if (!keys?.apiKey || !keys?.secretKey) {
-      console.warn("API keys in localStorage are missing or in an old format.");
+      console.warn("API keys in localStorage are missing or in the wrong format.");
       return null;
     }
 
-    const networkType: NetworkType = keys.networkType || (testnet ? 'futures-testnet' : 'mainnet');
+    const effectiveNetworkType = keys.networkType || networkType;
 
     return new BinanceAPI({
       apiKey: keys.apiKey,
       apiSecret: keys.secretKey,
-      networkType,
+      networkType: effectiveNetworkType,
     });
   } catch (error) {
     console.error('Error creating Binance client:', error);
