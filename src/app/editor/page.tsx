@@ -144,6 +144,7 @@ const initialStrategyConfig: BotConfig = {
 };
 
 const formatPrice = (price: number): string => {
+    if (!price) return '0.00';
     if (price >= 1) {
         return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
@@ -1026,7 +1027,7 @@ function StrategyEditorPage() {
                                         stroke="hsl(var(--accent))"
                                     />
                                     <Tooltip content={<CustomTooltip />} />
-                                    <Legend />
+                                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
                                     
                                     <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye (Maliyetler Sonrası)" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
                                     
