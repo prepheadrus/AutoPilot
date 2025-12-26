@@ -67,19 +67,20 @@ export class BinanceAPI {
   private baseUrl: string;
   private timeOffset: number = 0;
   private timeSynced: boolean = false;
+  private networkType: NetworkType;
 
   constructor(credentials: BinanceCredentials) {
     this.apiKey = credentials.apiKey;
     this.apiSecret = credentials.apiSecret;
 
     // Determine network type (backwards compatible with testnet boolean)
-    let networkType: NetworkType = credentials.networkType || 'mainnet';
+    this.networkType = credentials.networkType || 'mainnet';
     if (!credentials.networkType && credentials.testnet) {
-      networkType = 'spot-testnet'; // Backwards compatibility
+      this.networkType = 'spot-testnet'; // Backwards compatibility
     }
 
     // Set base URL based on network type
-    switch (networkType) {
+    switch (this.networkType) {
       case 'spot-testnet':
         this.baseUrl = 'https://testnet.binance.vision/api';
         break;
@@ -92,8 +93,29 @@ export class BinanceAPI {
         break;
     }
 
-    console.log(`[Binance API] Initialized with ${networkType} (${this.baseUrl})`);
+    console.log(`[Binance API] Initialized with ${this.networkType} (${this.baseUrl})`);
   }
+  
+  private getEndpointPath(basePath: string): string {
+    const isFutures = this.networkType === 'futures-testnet';
+    switch(basePath) {
+        case 'ping':
+            return isFutures ? '/v1/ping' : '/v3/ping';
+        case 'time':
+            return isFutures ? '/v1/time' : '/v3/time';
+        case 'account':
+            return isFutures ? '/v2/account' : '/v3/account';
+        case 'order':
+            return isFutures ? '/v1/order' : '/v3/order';
+        case 'openOrders':
+             return isFutures ? '/v1/openOrders' : '/v3/openOrders';
+        case 'ticker/price':
+            return isFutures ? '/v1/ticker/price' : '/v3/ticker/price';
+        default:
+            throw new Error(`Unknown API endpoint base path: ${basePath}`);
+    }
+  }
+
 
   /**
    * Generate HMAC SHA256 signature for authenticated requests
@@ -174,14 +196,13 @@ export class BinanceAPI {
    */
   async ping(): Promise<boolean> {
     try {
-      // The ping endpoint is different for futures.
-      const endpoint = this.baseUrl.includes('fapi') ? '/v1/ping' : '/v3/ping';
+      const endpoint = this.getEndpointPath('ping');
       await this.request('GET', endpoint);
       console.log('[Binance API] Ping successful');
       return true;
     } catch (error: any) {
       console.error('[Binance API] Ping failed:', error.message);
-      console.error('[Binance API] URL used for ping:', `${this.baseUrl}${this.baseUrl.includes('fapi') ? '/v1/ping' : '/v3/ping'}`);
+      console.error('[Binance API] URL used for ping:', `${this.baseUrl}${this.getEndpointPath('ping')}`);
       return false;
     }
   }
@@ -190,8 +211,7 @@ export class BinanceAPI {
    * Get server time
    */
   async getServerTime(): Promise<number> {
-    // The time endpoint is different for futures.
-    const endpoint = this.baseUrl.includes('fapi') ? '/v1/time' : '/v3/time';
+    const endpoint = this.getEndpointPath('time');
     const response = await this.request<{ serverTime: number }>('GET', endpoint);
     return response.serverTime;
   }
@@ -216,8 +236,7 @@ export class BinanceAPI {
    * Get account information
    */
   async getAccountInfo(): Promise<AccountInfo> {
-    // The account endpoint is versioned differently for futures.
-    const endpoint = this.baseUrl.includes('fapi') ? '/v2/account' : '/v3/account';
+    const endpoint = this.getEndpointPath('account');
     return this.request<AccountInfo>('GET', endpoint, {}, true);
   }
 
@@ -241,7 +260,7 @@ export class BinanceAPI {
    * Get current price for a symbol
    */
   async getPrice(symbol: string): Promise<number> {
-    const endpoint = this.baseUrl.includes('fapi') ? '/v1/ticker/price' : '/v3/ticker/price';
+    const endpoint = this.getEndpointPath('ticker/price');
     const response = await this.request<{ price: string }>('GET', endpoint, { symbol });
     return parseFloat(response.price);
   }
@@ -250,7 +269,7 @@ export class BinanceAPI {
    * Place a market order
    */
   async marketOrder(order: MarketOrder): Promise<BinanceOrderResponse> {
-    const endpoint = this.baseUrl.includes('fapi') ? '/v1/order' : '/v3/order';
+    const endpoint = this.getEndpointPath('order');
     const params: Record<string, any> = {
       symbol: order.symbol,
       side: order.side,
@@ -272,7 +291,7 @@ export class BinanceAPI {
    * Place a limit order
    */
   async limitOrder(order: LimitOrder): Promise<BinanceOrderResponse> {
-    const endpoint = this.baseUrl.includes('fapi') ? '/v1/order' : '/v3/order';
+    const endpoint = this.getEndpointPath('order');
     if (!order.quantity) {
       throw new Error('Quantity is required for limit orders');
     }
@@ -293,7 +312,7 @@ export class BinanceAPI {
    * Cancel an order
    */
   async cancelOrder(symbol: string, orderId: number): Promise<any> {
-    const endpoint = this.baseUrl.includes('fapi') ? '/v1/order' : '/v3/order';
+    const endpoint = this.getEndpointPath('order');
     return this.request('DELETE', endpoint, { symbol, orderId }, true);
   }
 
@@ -301,7 +320,7 @@ export class BinanceAPI {
    * Get open orders for a symbol
    */
   async getOpenOrders(symbol?: string): Promise<any[]> {
-    const endpoint = this.baseUrl.includes('fapi') ? '/v1/openOrders' : '/v3/openOrders';
+    const endpoint = this.getEndpointPath('openOrders');
     const params = symbol ? { symbol } : {};
     return this.request<any[]>('GET', endpoint, params, true);
   }
