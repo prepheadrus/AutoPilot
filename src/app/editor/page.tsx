@@ -153,7 +153,7 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[]): Backtest
 
     // Format incoming OHLCV data and extract prices
     const formattedOhlc = ohlcv.map(candle => ({
-      time: new Date(candle[0]).toLocaleDateString('tr-TR'),
+      time: new Date(candle[0]).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       date: new Date(candle[0]),
       open: candle[1],
       high: candle[2],
@@ -666,7 +666,7 @@ function StrategyEditorPage() {
   
   const handleRunBacktest = async (values: BacktestFormValues) => {
     setIsBacktesting(true);
-    setBacktestResult(null);
+    setBacktestResult(null); // Clear previous results
     toast({ title: "Backtest Başlatıldı", description: "Geçmiş veriler çekiliyor ve strateji simüle ediliyor..." });
 
     try {
@@ -701,6 +701,8 @@ function StrategyEditorPage() {
             description: errorMessage,
             variant: 'destructive',
         });
+        // Important: Stay on the form by not setting a result.
+        // setBacktestResult(null); // This is already the case
     } finally {
         setIsBacktesting(false);
     }
@@ -737,6 +739,18 @@ function StrategyEditorPage() {
   const hasMACD = useMemo(() => {
     return indicatorKeys.some(key => key.startsWith('MACD'));
   }, [indicatorKeys]);
+
+  const openBacktestModal = () => {
+    // Always reset results before opening the modal to ensure the form shows up.
+    setBacktestResult(null);
+    setIsBacktestModalOpen(true);
+  }
+
+  const closeBacktestModal = () => {
+    setIsBacktestModalOpen(false);
+    // Reset results on close to ensure a clean state for the next run.
+    setBacktestResult(null);
+  }
 
 
   return (
@@ -781,7 +795,7 @@ function StrategyEditorPage() {
                         "Stratejiyi Test Et"
                     )}
                 </Button>
-                 <Button onClick={() => setIsBacktestModalOpen(true)} disabled={isCompiling || isBacktesting} className="bg-indigo-600 hover:bg-indigo-500 text-white">
+                 <Button onClick={openBacktestModal} disabled={isCompiling || isBacktesting} className="bg-indigo-600 hover:bg-indigo-500 text-white">
                     <Play className="mr-2 h-4 w-4" /> Backtest
                 </Button>
                 <Button variant="secondary" className="bg-slate-600 hover:bg-slate-500" onClick={() => setIsSettingsModalOpen(true)} disabled={isCompiling || isBacktesting}>
@@ -800,11 +814,11 @@ function StrategyEditorPage() {
                 <div className="w-[90vw] h-[85vh] flex flex-col rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
                     <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0">
                         <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu</h2>
-                        <Button variant="ghost" size="icon" onClick={() => setIsBacktestModalOpen(false)}>
+                        <Button variant="ghost" size="icon" onClick={closeBacktestModal}>
                             <XIcon className="h-5 w-5"/>
                         </Button>
                     </div>
-                     {!backtestResult ? (
+                     {!backtestResult && !isBacktesting ? (
                          <div className="p-6 grid grid-cols-1 md:grid-cols-[300px,1fr] gap-6 overflow-y-auto">
                             {/* FORM PANEL */}
                             <div className="flex flex-col gap-6">
@@ -910,11 +924,7 @@ function StrategyEditorPage() {
                                           )}
                                         />
                                         <Button type="submit" className="w-full" disabled={isBacktesting}>
-                                            {isBacktesting ? (
-                                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Başlatılıyor...</>
-                                            ) : (
-                                                "Backtest'i Başlat"
-                                            )}
+                                          Backtest'i Başlat
                                         </Button>
                                      </form>
                                  </Form>
@@ -926,7 +936,13 @@ function StrategyEditorPage() {
                                 <p className="text-slate-500 mt-2 text-center">Stratejinizin geçmiş performansını görmek için soldaki formu doldurun.</p>
                             </div>
                          </div>
-                    ) : (
+                     ) : isBacktesting ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                          <Loader2 className="h-12 w-12 animate-spin mb-4" />
+                          <h3 className="text-xl font-semibold">Backtest Çalıştırılıyor...</h3>
+                          <p className="text-slate-500 mt-2">Geçmiş veriler çekiliyor ve stratejiniz simüle ediliyor. Lütfen bekleyin.</p>
+                        </div>
+                     ) : backtestResult ? (
                     <div className="p-4 md:p-6 flex-1 min-h-0 grid grid-rows-[auto,1fr] gap-6">
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                             <div className="rounded-lg bg-slate-800/50 p-3">
@@ -1034,7 +1050,7 @@ function StrategyEditorPage() {
                             )}
                         </div>
                     </div>
-                    )}
+                    ) : null}
                 </div>
             </div>
         )}
