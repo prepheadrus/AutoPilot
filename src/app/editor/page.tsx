@@ -128,6 +128,7 @@ type BacktestResult = {
     winRate: number;
     maxDrawdown: number;
     profitFactor: number;
+    totalCommissions: number;
   };
 };
 
@@ -154,8 +155,12 @@ const formatPrice = (price: number): string => {
 
 // --- START: Backtest Engine ---
 
+const COMMISSION_RATE = 0.00075; // 0.075%
+const SLIPPAGE_RATE = 0.0005; // 0.05%
+
+
 // The core backtesting engine
-const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[]): BacktestResult | { error: string } => {
+const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[], initialBalance: number): BacktestResult | { error: string } => {
     // 1. Find all data sources
     const dataSourceNodes = nodes.filter(n => n.type === 'dataSource');
     if (dataSourceNodes.length === 0) {
@@ -212,7 +217,8 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[]): Backtest
 
     // 3. Trading Simulation
     let inPosition = false;
-    let portfolioValue = 10000;
+    let entryPrice = 0;
+    let portfolioValue = initialBalance;
     const pnlData = [{ time: new Date(ohlcv[0][0] - 3600*1000).toLocaleDateString('tr-TR'), pnl: portfolioValue }];
     const trades = [];
     let peakPortfolio = portfolioValue;
@@ -221,6 +227,7 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[]): Backtest
     let totalLoss = 0;
     let winningTrades = 0;
     let losingTrades = 0;
+    let totalCommissions = 0;
     const actionNodes = nodes.filter(n => n.type === 'action');
 
     const checkConditionsForAction = (candleIndex: number, actionNodeId: string): boolean => {
@@ -274,23 +281,33 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[]): Backtest
         }
 
         if (shouldBuy && !inPosition) {
+            const buyPrice = candle.price * (1 + SLIPPAGE_RATE);
+            const commission = portfolioValue * COMMISSION_RATE;
+            portfolioValue -= commission;
+            totalCommissions += commission;
+            
             inPosition = true;
-            trades.push({ time: candle.time, type: 'buy', price: candle.price });
+            entryPrice = buyPrice;
+            trades.push({ time: candle.time, type: 'buy', price: buyPrice });
         } else if (shouldSell && inPosition) {
-            const entryTrade = trades.filter(t => t.type === 'buy').pop();
-            if(entryTrade) {
-                const profit = candle.price - entryTrade.price;
-                 if (profit > 0) {
-                    totalProfit += profit;
-                    winningTrades++;
-                } else {
-                    totalLoss += Math.abs(profit);
-                    losingTrades++;
-                }
-                portfolioValue += profit;
+            const sellPrice = candle.price * (1 - SLIPPAGE_RATE);
+            const profit = (sellPrice - entryPrice) / entryPrice;
+            const positionValue = portfolioValue * (1 + profit);
+            const commission = positionValue * COMMISSION_RATE;
+            totalCommissions += commission;
+            
+            portfolioValue = positionValue - commission;
+            
+            if (profit > 0) {
+                totalProfit += profit * portfolioValue; // Gross profit for profit factor
+                winningTrades++;
+            } else {
+                totalLoss += Math.abs(profit * portfolioValue); // Gross loss for profit factor
+                losingTrades++;
             }
+
             inPosition = false;
-            trades.push({ time: candle.time, type: 'sell', price: candle.price });
+            trades.push({ time: candle.time, type: 'sell', price: sellPrice });
         }
 
         pnlData.push({ time: candle.time, pnl: portfolioValue });
@@ -306,11 +323,12 @@ const runBacktestEngine = (ohlcv: any[], nodes: Node[], edges: Edge[]): Backtest
 
     const totalTrades = winningTrades + losingTrades;
     const stats = {
-      netProfit: (portfolioValue - 10000) / 10000 * 100,
+      netProfit: (portfolioValue - initialBalance) / initialBalance * 100,
       totalTrades: totalTrades,
       winRate: totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0,
       maxDrawdown: maxDrawdown * 100,
       profitFactor: totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0,
+      totalCommissions: totalCommissions
     }
 
     const finalChartData = chartDataWithIndicators.map((d, i) => {
@@ -360,7 +378,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
             <div className="p-2 bg-slate-800/80 border border-slate-700 rounded-md text-white text-xs backdrop-blur-sm">
                 <p className="font-bold">{`Tarih: ${label}`}</p>
                 {data.price && <p>Fiyat: <span className="font-mono">${formatPrice(data.price)}</span></p>}
-                {payload.find(p => p.dataKey === 'pnl') && <p>Kâr: <span className="font-mono">${data.pnl.toFixed(2)}</span></p>}
+                {payload.find(p => p.dataKey === 'pnl') && <p>Bakiye: <span className="font-mono">${data.pnl.toFixed(2)}</span></p>}
 
                 {Object.keys(data)
                     .filter(key => key.includes('(') || key.includes(')'))
@@ -697,7 +715,7 @@ function StrategyEditorPage() {
 
         console.log(`Fetched ${data.ohlcv.length} candles for backtest.`);
         
-        const result = runBacktestEngine(data.ohlcv, nodes, edges);
+        const result = runBacktestEngine(data.ohlcv, nodes, edges, values.initialBalance);
         if ('error' in result) {
             throw new Error(result.error);
         }
@@ -970,9 +988,9 @@ function StrategyEditorPage() {
                                 <p className="text-xs text-slate-400">Başarı Oranı</p>
                                 <p className="text-lg font-bold">{backtestResult.stats.winRate.toFixed(1)}%</p>
                             </div>
-                            <div className="rounded-lg bg-slate-800/50 p-3">
-                                <p className="text-xs text-slate-400">Maks. Düşüş</p>
-                                <p className="text-lg font-bold text-red-400">-{backtestResult.stats.maxDrawdown.toFixed(2)}%</p>
+                             <div className="rounded-lg bg-slate-800/50 p-3">
+                                <p className="text-xs text-slate-400">Toplam Komisyon</p>
+                                <p className="text-lg font-bold">${backtestResult.stats.totalCommissions.toFixed(2)}</p>
                             </div>
                             <div className="rounded-lg bg-slate-800/50 p-3">
                                 <p className="text-xs text-slate-400">Kâr Faktörü</p>
@@ -1010,7 +1028,7 @@ function StrategyEditorPage() {
                                     <Tooltip content={<CustomTooltip />} />
                                     <Legend />
                                     
-                                    <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Kümülatif Kâr" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
+                                    <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye (Maliyetler Sonrası)" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
                                     
                                     <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" dot={false} strokeWidth={2} />
                                      {indicatorKeys.filter(k => !k.startsWith('RSI') && !k.startsWith('MACD')).map((key, index) => (
