@@ -13,26 +13,30 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create Binance API client (backwards compatible with testnet boolean)
+    console.log(`[test-keys] Received test request for network: ${networkType}`);
+
+    // Create Binance API client using the robust BinanceAPI class
     const binance = new BinanceAPI({
       apiKey,
       apiSecret: secretKey,
-      testnet, // Backwards compatibility
       networkType,
     });
 
-    // Test connection
+    // Test connection by pinging the server
     const pingSuccess = await binance.ping();
     if (!pingSuccess) {
       console.error('[test-keys] Ping failed for network:', networkType);
       return NextResponse.json(
-        { success: false, message: `Binance API'ye bağlanılamadı (${networkType}). Lütfen network tipini kontrol edin veya konsol loglarına bakın.` },
+        { success: false, message: `Binance API'ye bağlanılamadı (${networkType}). Lütfen network tipini ve sunucu durumunu kontrol edin.` },
         { status: 500 }
       );
     }
+    console.log('[test-keys] Ping successful, testing credentials...');
 
-    // Validate credentials
+    // Validate credentials by fetching account info
     const credentialsTest = await binance.testCredentials();
+    console.log('[test-keys] Credentials test result:', credentialsTest);
+
     if (!credentialsTest.valid) {
       return NextResponse.json(
         { success: false, message: credentialsTest.message },
@@ -51,17 +55,18 @@ export async function POST(request: Request) {
         canWithdraw: accountInfo.canWithdraw,
         canDeposit: accountInfo.canDeposit,
       },
-      networkType,
-      testnet, // Backwards compatibility
+      networkType, // Return the tested network type
     });
 
   } catch (error: any) {
-    console.error('API anahtar testi hatası:', error.message);
+    console.error('API anahtar testi rotasında hata:', error.message);
     let errorMessage = error.message || 'Bilinmeyen bir hata oluştu.';
 
-    // Add specific error handling for code -2015 as requested
+    // Add specific error handling for common Binance errors
     if (typeof errorMessage === 'string' && errorMessage.includes('-2015')) {
-      errorMessage = "Kimlik doğrulama hatası (Kod: -2015). Lütfen API anahtarınızın Spot Testnet için doğru izinlere sahip olduğundan ve IP kısıtlaması varsa sunucu IP'sinin eklendiğinden emin olun.";
+      errorMessage = "Kimlik doğrulama hatası (Kod: -2015). Lütfen API anahtarınızın doğru izinlere (özellikle Spot veya Futures için) sahip olduğundan ve IP kısıtlaması varsa sunucu IP'sinin eklendiğinden emin olun.";
+    } else if (typeof errorMessage === 'string' && errorMessage.includes('-2008')) {
+        errorMessage = `Geçersiz API Anahtarı (Kod: -2008). Lütfen girdiğiniz anahtarın doğru olduğundan emin olun.`
     } else if (typeof errorMessage === 'string' && errorMessage.includes('testnet/sandbox mode is not supported for futures')) {
       errorMessage = "Futures Testnet yapılandırma hatası. CCXT kütüphanesi bu modu artık desteklemiyor. Lütfen geliştiriciyle iletişime geçin.";
     }

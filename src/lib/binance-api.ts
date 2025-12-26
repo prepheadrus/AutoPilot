@@ -54,16 +54,17 @@ export class BinanceAPI {
         defaultType: isFutures ? 'future' : 'spot',
       },
     };
-
+    
     this.exchange = new (ccxt as any).binance(exchangeOptions);
 
     if (isSpotTestnet) {
-      console.log('[BinanceAPI] Enabling sandbox mode for Spot Testnet.');
-      this.exchange.setSandboxMode(true); 
+        console.log('[BinanceAPI] Enabling sandbox mode for Spot Testnet. URL will be set to testnet.binance.vision.');
+        this.exchange.setSandboxMode(true);
     } else if (isFutures) {
-      // For Futures Testnet, we set the URL directly as setSandboxMode is deprecated for futures.
-      console.log('[BinanceAPI] Setting direct URL for Futures Testnet.');
-      this.exchange.urls['api'] = 'https://testnet.binancefuture.com';
+        // As per docs, setSandboxMode is deprecated for futures. We must set the URL directly.
+        // The correct URL for the demo trading futures is demo-fapi.binance.com
+        console.log('[BinanceAPI] Setting direct URL for Futures Testnet to demo-fapi.binance.com.');
+        this.exchange.urls['api'] = 'https://demo-fapi.binance.com/fapi';
     }
     
     console.log(`[BinanceAPI] CCXT Initialized. Final API URL: ${JSON.stringify(this.exchange.urls.api)}`);
@@ -95,13 +96,16 @@ export class BinanceAPI {
    */
   async testCredentials(): Promise<{ valid: boolean; message: string }> {
     try {
+      console.log("[BinanceAPI] Testing credentials by fetching account info...");
       const accountInfo = await this.getAccountInfo();
+      console.log("[BinanceAPI] Account info fetched successfully.", accountInfo);
       if (accountInfo.canTrade) {
-        return { valid: true, message: 'API anahtarları geçerli ve trading is enabled.' };
+        return { valid: true, message: 'API credentials are valid and trading is enabled.' };
       } else {
         return { valid: false, message: 'API anahtarları geçerli fakat trading devre dışı.' };
       }
     } catch (error: any) {
+       console.error("[BinanceAPI] Credentials test failed:", error.message);
        if (error instanceof ccxt.AuthenticationError) {
            return { valid: false, message: `Kimlik doğrulama hatası: ${error.message}` };
        }
@@ -115,7 +119,11 @@ export class BinanceAPI {
   async getAccountInfo(): Promise<AccountInfo> {
     try {
         console.log(`[BinanceAPI] Fetching account info for ${this.networkType}...`);
-        const balanceInfo = await this.exchange.fetchBalance();
+        // For futures, fetchBalance returns different structure, we need to be specific.
+        const balanceInfo = this.networkType === 'futures-testnet' 
+            ? await this.exchange.fetchBalance({type: 'future'}) 
+            : await this.exchange.fetchBalance();
+
         const info = balanceInfo.info || {};
         
         return {
@@ -138,7 +146,7 @@ export class BinanceAPI {
    * Get account balances
    */
   async getBalances(): Promise<AccountBalance[]> {
-    const balance = await this.exchange.fetchBalance();
+    const balance = await this.getAccountInfo();
     return Object.entries(balance.total)
         .filter(([, total]) => total && total > 0)
         .map(([asset, total]) => ({
@@ -153,7 +161,7 @@ export class BinanceAPI {
    * Get balance for a specific asset
    */
   async getBalance(asset: string): Promise<AccountBalance | null> {
-    const balances = await this.exchange.fetchBalance();
+    const balances = await this.getAccountInfo();
     if (balances.total && balances.total[asset]) {
       return {
         asset,
@@ -182,14 +190,16 @@ export class BinanceAPI {
   async marketOrder(order: MarketOrder): Promise<BinanceOrderResponse> {
     const { symbol, side, quantity, quoteOrderQty } = order;
     
+    const isSpot = this.exchange.options.defaultType === 'spot';
+    const isBuy = side === 'BUY';
+    
     // For spot BUY, use quoteOrderQty; for SELL use quantity.
     // For futures, it's always quantity.
-    const isSpotBuy = this.exchange.options.defaultType === 'spot' && side === 'BUY';
-    const amount = isSpotBuy ? quoteOrderQty : quantity;
-    const params = isSpotBuy ? { 'quoteOrderQty': amount } : {};
+    const amount = isSpot && isBuy ? quoteOrderQty : quantity;
+    const params = isSpot && isBuy ? { 'quoteOrderQty': amount } : {};
 
     if (!amount) {
-        throw new Error(`For a market ${side} order, you must provide ${isSpotBuy ? 'quoteOrderQty' : 'quantity'}.`);
+        throw new Error(`For a market ${side} order, you must provide ${isSpot && isBuy ? 'quoteOrderQty' : 'quantity'}.`);
     }
 
     return this.exchange.createMarketOrder(symbol, side.toLowerCase() as 'buy' | 'sell', amount, undefined, params);
@@ -230,7 +240,7 @@ export async function createBinanceClient(testnet: boolean = false): Promise<Bin
 
     const keys = JSON.parse(stored);
     
-    // New format: { apiKey, secretKey, networkType }
+    // Check for the new, flat format: { apiKey, secretKey, networkType }
     if (!keys?.apiKey || !keys?.secretKey) {
       console.warn("API keys in localStorage are missing or in an old format.");
       return null;
@@ -241,7 +251,7 @@ export async function createBinanceClient(testnet: boolean = false): Promise<Bin
 
     return new BinanceAPI({
       apiKey: keys.apiKey,
-      apiSecret: keys.secretKey,
+      apiSecret: keys.secretKey, // Correctly pass apiSecret
       networkType,
     });
   } catch (error) {
