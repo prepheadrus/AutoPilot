@@ -127,8 +127,7 @@ export default function SettingsPage() {
             if (result.success) {
                  try {
                     localStorage.setItem('exchangeKeys', JSON.stringify({ apiKey, secretKey, networkType }));
-                    const networkLabel = networkType === 'mainnet' ? 'Mainnet (Canlı)'
-                        : 'Futures Testnet';
+                    const networkLabel = networkType === 'mainnet' ? 'Mainnet (Canlı)' : 'Futures Testnet';
                     toast({ title: "Bağlantı Başarılı! 🚀", description: `API anahtarlarınız güvenli bir şekilde kaydedildi (${networkLabel}).` });
                     setIsConnected(true);
                 } catch (error) {

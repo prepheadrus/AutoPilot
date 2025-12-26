@@ -1,6 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import { BinanceAPI } from '@/lib/binance-api';
+import ccxt from 'ccxt';
 
 export async function POST(request: Request) {
   try {
@@ -44,17 +45,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get account info to confirm all permissions
-    const accountInfo = await binance.getAccountInfo();
-
     return NextResponse.json({
       success: true,
       message: credentialsTest.message,
-      accountInfo: {
-        canTrade: accountInfo.canTrade,
-        canWithdraw: accountInfo.canWithdraw,
-        canDeposit: accountInfo.canDeposit,
-      },
+      accountInfo: {}, // Account info is implicitly checked in testCredentials
       networkType, // Return the tested network type
     });
 
@@ -63,14 +57,13 @@ export async function POST(request: Request) {
     let errorMessage = error.message || 'Bilinmeyen bir hata oluştu.';
 
     // Add specific error handling for common Binance errors
-    if (typeof errorMessage === 'string' && (errorMessage.includes('-2015') || errorMessage.includes('Invalid API-key'))) {
+    if (error instanceof ccxt.AuthenticationError) {
+        errorMessage = `Kimlik doğrulama hatası: ${error.message}. Lütfen API anahtarınızın doğru izinlere (özellikle Spot veya Futures için) sahip olduğundan ve IP kısıtlaması varsa sunucu IP'sinin eklendiğinden emin olun.`;
+    } else if (typeof errorMessage === 'string' && (errorMessage.includes('-2015') || errorMessage.includes('Invalid API-key'))) {
       errorMessage = "Kimlik doğrulama hatası (Kod: -2015). Lütfen API anahtarınızın doğru izinlere (özellikle Spot veya Futures için) sahip olduğundan ve IP kısıtlaması varsa sunucu IP'sinin eklendiğinden emin olun.";
     } else if (typeof errorMessage === 'string' && errorMessage.includes('-2008')) {
         errorMessage = `Geçersiz API Anahtarı (Kod: -2008). Lütfen girdiğiniz anahtarın doğru olduğundan emin olun.`
-    } else if (typeof errorMessage === 'string' && errorMessage.includes('testnet/sandbox mode is not supported for futures')) {
-      errorMessage = "Futures Testnet yapılandırma hatası. CCXT kütüphanesi bu modu artık desteklemiyor. Lütfen geliştiriciyle iletişime geçin.";
     }
-
 
     return NextResponse.json(
       { success: false, message: errorMessage },

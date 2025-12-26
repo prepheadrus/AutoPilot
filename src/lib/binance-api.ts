@@ -39,30 +39,32 @@ export class BinanceAPI {
   constructor(credentials: BinanceCredentials) {
     this.networkType = credentials.networkType || 'mainnet';
 
-    const exchangeOptions: any = {
+    const exchangeOptions: ccxt.Params = {
       apiKey: credentials.apiKey,
       secret: credentials.apiSecret,
     };
     
     console.log(`[BinanceAPI] Initializing for network: ${this.networkType}`);
 
-    this.exchange = new (ccxt as any).binance(exchangeOptions);
-
     if (this.networkType === 'futures-testnet') {
-      console.log('[BinanceAPI] Configuring for Futures Testnet (demo-fapi.binance.com)');
-      this.exchange.options['defaultType'] = 'future';
-      this.exchange.urls['api'] = {
-        'public': 'https://demo-fapi.binance.com/fapi',
-        'private': 'https://demo-fapi.binance.com/fapi',
-        'fapiPublic': 'https://demo-fapi.binance.com/fapi',
-        'fapiPrivate': 'https://demo-fapi.binance.com/fapi',
-      };
+        console.log('[BinanceAPI] Configuring for Futures Testnet (demo-fapi.binance.com)');
+        exchangeOptions.options = {
+            'defaultType': 'future',
+        };
+        // This is the key change: Set the specific API endpoint for futures testnet
+        exchangeOptions.urls = {
+            'api': 'https://demo-fapi.binance.com'
+        };
     } else {
         console.log('[BinanceAPI] Configuring for Mainnet (Spot)');
-        this.exchange.options['defaultType'] = 'spot';
+        exchangeOptions.options = {
+            'defaultType': 'spot',
+        };
     }
+
+    this.exchange = new (ccxt as any).binance(exchangeOptions);
     
-    console.log(`[BinanceAPI] CCXT Initialized. Final API URL: ${JSON.stringify(this.exchange.urls.api)}`);
+    console.log(`[BinanceAPI] CCXT Initialized. Final API URL base: ${JSON.stringify(this.exchange.urls.api)}`);
   }
 
   /**
@@ -86,9 +88,10 @@ export class BinanceAPI {
     try {
       console.log("[BinanceAPI] Testing credentials by fetching account info...");
       const accountInfo = await this.getAccountInfo();
-      console.log("[BinanceAPI] Account info fetched successfully.", accountInfo);
+      console.log("[BinanceAPI] Account info fetched successfully.");
+
       if (accountInfo.canTrade) {
-        return { valid: true, message: 'API credentials are valid and trading is enabled.' };
+        return { valid: true, message: 'API anahtarları geçerli ve trading is enabled.' };
       } else {
         return { valid: false, message: 'API anahtarları geçerli fakat trading devre dışı.' };
       }
@@ -110,10 +113,10 @@ export class BinanceAPI {
         
         let info;
         if (this.networkType === 'futures-testnet') {
-            // Use the correct method that calls /fapi/v2/account
-            info = await this.exchange.fapiPrivateGetAccount();
+            // This calls /fapi/v2/account, which is correct for futures
+            info = await this.exchange.fetchBalance();
         } else {
-            // For mainnet spot
+            // This calls /api/v3/account for spot
             info = await this.exchange.privateGetAccount();
         }
 
