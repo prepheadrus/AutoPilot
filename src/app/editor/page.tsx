@@ -19,29 +19,25 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ComposedChart,
   Line,
-  Bar,
   Area,
-  AreaChart,
-  Brush,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
-  ReferenceArea,
 } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { RSI as RSICalculator, SMA as SMACalculator } from 'technicalindicators';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from '@/components/ui/sheet';
+
 
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from '@/components/ui/slider';
-import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, ArrowUp, ArrowDown, Database, Zap, CalendarIcon, History, ZoomOut } from 'lucide-react';
+import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, Database, Zap, CalendarIcon, History, AreaChart, ChevronsUpDown, Maximize } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
@@ -67,6 +63,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { addDays } from 'date-fns';
+import { Checkbox } from '@/components/ui/checkbox';
 
 
 const initialNodes: Node[] = [
@@ -198,7 +195,6 @@ const runBacktestEngine = (
     slippageRate: number
 ): BacktestResult | { error: string } => {
     
-    // --- 1. Pre-calculate all indicators ---
     const prices = ohlcv.map(c => c[4]);
     const indicatorCache: Record<string, any[]> = {};
     const indicatorNodes = nodes.filter(n => n.type === 'indicator');
@@ -217,16 +213,19 @@ const runBacktestEngine = (
             }
         } catch (e) {
             console.error(`Error calculating ${indicatorType} for node ${node.id}:`, e);
-            result = []; // Ensure result is an array even on error
+            result = []; 
         }
 
         const padding = Array(prices.length - result.length).fill(undefined);
         indicatorCache[node.id] = padding.concat(result);
     });
 
-    // --- 2. Recursive Logic Solver ---
-    const memo: { [key: string]: any } = {};
     const simulationCache: SimulationCache = {};
+    for (let i = 0; i < prices.length; i++) {
+        simulationCache[i] = {};
+    }
+
+    const memo: { [key: string]: any } = {};
 
     const evaluateNode = (nodeId: string, candleIndex: number): boolean => {
         const memoKey = `${nodeId}-${candleIndex}`;
@@ -235,25 +234,20 @@ const runBacktestEngine = (
         const node = nodes.find(n => n.id === nodeId);
         if (!node) return false;
 
-        const incomingEdges = edges.filter(e => e.target === nodeId);
         let result = false;
-
-        if (node.type === 'indicator') {
-             // An indicator node itself doesn't return a boolean, its value is used by a logic node.
-             // But for caching purposes, we store its raw value.
-             const indicatorValue = indicatorCache[nodeId]?.[candleIndex];
-             simulationCache[candleIndex] = { ...simulationCache[candleIndex], [nodeId]: indicatorValue };
-             return false; // Not a boolean signal
-        }
         
-        if (node.type === 'logic') {
+        if (node.type === 'indicator') {
+             const indicatorValue = indicatorCache[nodeId]?.[candleIndex];
+             simulationCache[candleIndex][nodeId] = indicatorValue;
+             result = false;
+        } else if (node.type === 'logic') {
             const { logicType } = node.data;
+            const incomingEdges = edges.filter(e => e.target === nodeId);
 
             if (logicType === 'compare') {
                 const indicatorEdge = incomingEdges[0];
                 if (!indicatorEdge) return false;
                 
-                // We don't evaluate the indicator node, we just get its cached value
                 const fullIndicatorValue = indicatorCache[indicatorEdge.source]?.[candleIndex];
                 if (fullIndicatorValue === undefined) return false;
 
@@ -278,18 +272,13 @@ const runBacktestEngine = (
                  else result = incomingEdges.some(edge => evaluateNode(edge.source, candleIndex));
             }
         }
-
+        
         memo[memoKey] = result;
-        simulationCache[candleIndex] = { ...simulationCache[candleIndex], [nodeId]: result };
+        simulationCache[candleIndex][nodeId] = result;
         return result;
     };
 
-    // Initialize cache
-    for (let i = 0; i < prices.length; i++) {
-        simulationCache[i] = {};
-    }
 
-    // --- 3. Trading Simulation ---
     let inPosition = false;
     let entryPrice = 0;
     let portfolioValue = initialBalance;
@@ -305,6 +294,8 @@ const runBacktestEngine = (
     const actionNodes = nodes.filter(n => n.type === 'action');
 
     for (let i = 1; i < prices.length; i++) {
+        nodes.forEach(node => evaluateNode(node.id, i));
+        
         const candle = ohlcv[i];
         
         let shouldBuy = false;
@@ -312,8 +303,8 @@ const runBacktestEngine = (
         if (buyActionNode) {
             const buyEdge = edges.find(e => e.target === buyActionNode.id);
             if (buyEdge) {
-                shouldBuy = evaluateNode(buyEdge.source, i);
-                 simulationCache[i][buyActionNode.id] = shouldBuy;
+                shouldBuy = simulationCache[i][buyEdge.source];
+                simulationCache[i][buyActionNode.id] = shouldBuy;
             }
         }
 
@@ -322,13 +313,10 @@ const runBacktestEngine = (
         if (sellActionNode) {
             const sellEdge = edges.find(e => e.target === sellActionNode.id);
             if (sellEdge) {
-                shouldSell = evaluateNode(sellEdge.source, i);
+                shouldSell = simulationCache[i][sellEdge.source];
                 simulationCache[i][sellActionNode.id] = shouldSell;
             }
         }
-
-        // Evaluate all nodes for caching purposes, even if no trade happens
-        nodes.forEach(node => evaluateNode(node.id, i));
 
         const currentPrice = candle[4];
         if (shouldBuy && !inPosition) {
@@ -419,15 +407,14 @@ const TradeArrowDot = (props: any) => {
     }
 
     const isBuy = payload.tradeMarker.type === 'buy';
-    const color = isBuy ? '#22c55e' : '#ef4444'; // green-500, red-500
+    const color = isBuy ? '#22c55e' : '#ef4444'; 
     
-    // Position arrow relative to the candle's high/low
     const arrowY = isBuy ? payload.low - Math.abs(payload.high-payload.low)*0.2 : payload.high + Math.abs(payload.high-payload.low)*0.2;
     const finalCX = cx ?? 0;
 
     const points = isBuy
-        ? `${finalCX - 5},${arrowY + 5} ${finalCX},${arrowY} ${finalCX + 5},${arrowY + 5}` // Up arrow
-        : `${finalCX - 5},${arrowY - 5} ${finalCX},${arrowY} ${finalCX + 5},${arrowY - 5}`; // Down arrow
+        ? `${finalCX - 5},${arrowY + 5} ${finalCX},${arrowY} ${finalCX + 5},${arrowY + 5}`
+        : `${finalCX - 5},${arrowY - 5} ${finalCX},${arrowY} ${finalCX + 5},${arrowY - 5}`; 
 
     return (
         <g>
@@ -451,8 +438,8 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
         return (
             <div className="p-2 bg-slate-800/80 border border-slate-700 rounded-md text-white text-xs backdrop-blur-sm">
                 <p className="font-bold">{`Tarih: ${label}`}</p>
-                {data.price && <p>Fiyat: <span className="font-mono">${formatPrice(data.price)}</span></p>}
-                {payload.find(p => p.dataKey === 'pnl') && <p>Bakiye: <span className="font-mono">${data.pnl.toFixed(2)}</span></p>}
+                {payload.find(p => p.dataKey === 'price') && <p>Fiyat: <span className="font-mono">${formatPrice(data.price)}</span></p>}
+                {payload.find(p => p.dataKey === 'pnl') && <p>Bakiye: <span className="font-mono">${(data.pnl || 0).toFixed(2)}</span></p>}
 
                 {Object.keys(data)
                     .filter(key => key.includes('(') || key.includes(')'))
@@ -485,9 +472,10 @@ function StrategyEditorPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isCompiling, setIsCompiling] = useState(false);
   const [backtestProgress, setBacktestProgress] = useState<BacktestProgress | null>(null);
-  const [isReportModalOpen, setReportModalOpen] = useState(false);
+  const [isReportOpen, setReportOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [strategyConfig, setStrategyConfig] = useState<BotConfig>(initialStrategyConfig);
+  const [sheetHeight, setSheetHeight] = useState<'70%' | '40%'>('70%');
   
   const [backtestHistory, setBacktestHistory] = useState<BacktestRun[]>([]);
   const [activeBacktestRun, setActiveBacktestRun] = useState<BacktestRun | null>(null);
@@ -521,11 +509,9 @@ function StrategyEditorPage() {
   });
 
   useEffect(() => {
-    // Update form's symbol when the node's symbol changes
     form.setValue('symbol', dataSourceNodeSymbol);
   }, [dataSourceNodeSymbol, form]);
 
-  // Load history from localStorage on mount
   useEffect(() => {
     try {
         const storedHistory = localStorage.getItem('backtestHistory');
@@ -547,7 +533,7 @@ function StrategyEditorPage() {
                 setActiveBacktestRun(reportToLoad);
                 setNodes(reportToLoad.nodes || initialNodes);
                 setEdges(reportToLoad.edges || initialEdges);
-                setReportModalOpen(true);
+                setReportOpen(true);
             } else {
                 toast({ title: "Rapor Bulunamadı", description: "Geçmiş testler arasında bu rapor bulunamadı.", variant: "destructive" });
             }
@@ -558,7 +544,6 @@ function StrategyEditorPage() {
 
   }, [searchParams, toast, setNodes, setEdges]);
 
-  // Save history to localStorage whenever it changes
   useEffect(() => {
     try {
         if(backtestHistory.length > 0) {
@@ -908,12 +893,12 @@ function StrategyEditorPage() {
   const openBacktestModal = () => {
     setActiveBacktestRun(null);
     setBacktestProgress(null);
-    setReportModalOpen(true);
+    setReportOpen(true);
     setActiveChartIndex(null);
   }
 
   const closeReportModal = () => {
-    setReportModalOpen(false);
+    setReportOpen(false);
     setActiveBacktestRun(null);
     setBacktestProgress(null);
     router.replace('/editor', { scroll: false });
@@ -941,14 +926,12 @@ function StrategyEditorPage() {
     });
   }, [activeBacktestResult]);
   
-  // This is the core of the visual feedback feature
   useEffect(() => {
-    if (!activeChartIndex || !activeBacktestResult?.simulationCache) {
-      // If no candle is hovered, revert to default edge style
+    if (!isReportOpen || !activeChartIndex || !activeBacktestResult?.simulationCache) {
       setEdges((eds) => eds.map(edge => ({
         ...edge,
         animated: false,
-        style: { stroke: '#606b7d', strokeWidth: 2 }, // Default color
+        style: { stroke: '#606b7d', strokeWidth: 2 },
       })));
       return;
     }
@@ -964,7 +947,7 @@ function StrategyEditorPage() {
         ...edge,
         animated: isSignalTrue,
         style: {
-          stroke: isSignalTrue ? '#22c55e' : '#ef4444', // green-500 or red-500
+          stroke: isSignalTrue ? '#22c55e' : '#ef4444',
           strokeWidth: isSignalTrue ? 3 : 2,
         },
       };
@@ -972,7 +955,7 @@ function StrategyEditorPage() {
 
     setEdges(newEdges);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChartIndex, activeBacktestResult]);
+  }, [activeChartIndex, activeBacktestResult, isReportOpen]);
 
 
   return (
@@ -1037,137 +1020,145 @@ function StrategyEditorPage() {
             </div>
         </main>
         
-        {isReportModalOpen && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-                <div className="w-[95vw] h-[95vh] flex flex-col rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
-                    <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0">
-                        <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu</h2>
-                        <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon" onClick={closeReportModal}>
-                                <XIcon className="h-5 w-5"/>
-                            </Button>
-                        </div>
+         <Sheet open={isReportOpen} onOpenChange={(open) => !open && closeReportModal()}>
+            <SheetContent 
+              side="bottom" 
+              className={cn(
+                  "bg-slate-900/95 border-slate-800 text-white p-0 flex flex-col transition-all duration-300 ease-in-out",
+                  sheetHeight === '70%' ? 'h-[70vh]' : 'h-[40vh]'
+              )}
+              overlayClassName="bg-black/20 backdrop-blur-none"
+              >
+                <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0">
+                    <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu</h2>
+                    <div className="flex items-center gap-2">
+                         <Button variant="ghost" size="icon" onClick={() => setSheetHeight(h => h === '70%' ? '40%' : '70%')}>
+                            <ChevronsUpDown className="h-5 w-5"/>
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={closeReportModal}>
+                            <XIcon className="h-5 w-5"/>
+                        </Button>
                     </div>
-                     <div className="flex flex-1 min-h-0">
-                         <aside className="w-72 border-r border-slate-800 flex flex-col">
-                            <div className="p-4 border-b border-slate-800">
-                                <h3 className="font-semibold flex items-center gap-2"><History className="h-5 w-5"/>Geçmiş Testler</h3>
-                            </div>
-                            <div className="flex-1 overflow-y-auto">
-                                {backtestHistory.length === 0 && <p className="p-4 text-sm text-slate-500">Henüz backtest yapılmadı.</p>}
-                                <ul>
-                                    {backtestHistory.map(run => (
-                                        <li key={run.id}>
-                                            <button 
-                                                onClick={() => handleSelectHistoryRun(run)}
-                                                className={cn(
-                                                    "w-full text-left p-3 text-sm hover:bg-slate-800/50 transition-colors border-l-2 border-transparent",
-                                                    activeBacktestRun?.id === run.id && "bg-slate-800 border-primary"
-                                                )}>
-                                                <div className="flex justify-between font-semibold">
-                                                    <span>{run.params.symbol}</span>
-                                                    <span className={run.result.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}>
-                                                        {run.result.stats.netProfit >= 0 ? '+' : ''}{(run.result.stats.netProfit || 0).toFixed(2)}%
-                                                    </span>
-                                                </div>
-                                                <p className="text-xs text-slate-400">{run.params.timeframe} | {format(new Date(run.params.dateRange.from), 'dd.MM.yy')} - {format(new Date(run.params.dateRange.to), 'dd.MM.yy')}</p>
-                                                <p className="text-xs text-slate-500 mt-1">{format(new Date(run.id), 'dd MMMM yyyy, HH:mm')}</p>
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                         </aside>
-                        {!activeBacktestResult && !backtestProgress ? (
-                           <div className="p-6 w-full max-w-md mx-auto">
-                                <h3 className="font-semibold text-lg flex items-center gap-2 mb-6"><Settings className="h-5 w-5" />Backtest Ayarları</h3>
-                                <Form {...form}>
-                                    <form onSubmit={form.handleSubmit(handleRunBacktest)} className="space-y-6">
-                                        <FormField control={form.control} name="symbol" render={({ field }) => (<FormItem><FormLabel>İşlem Çifti</FormLabel><FormControl><Input {...field} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)} />
-                                        <FormField control={form.control} name="timeframe" render={({ field }) => (<FormItem><FormLabel>Zaman Dilimi</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="bg-slate-800 border-slate-700"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="1m">1 Dakika</SelectItem><SelectItem value="5m">5 Dakika</SelectItem><SelectItem value="15m">15 Dakika</SelectItem><SelectItem value="1h">1 Saat</SelectItem><SelectItem value="4h">4 Saat</SelectItem><SelectItem value="1d">1 Gün</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
-                                        <FormField control={form.control} name="dateRange" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Tarih Aralığı</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal bg-slate-800 border-slate-700 hover:bg-slate-700", !field.value && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{field.value?.from ? (field.value.to ? (<>{format(field.value.from, "LLL dd, y")} - {format(field.value.to, "LLL dd, y")}</>) : (format(field.value.from, "LLL dd, y"))) : (<span>Tarih seçin</span>)}</Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={field.value.from} selected={field.value} onSelect={field.onChange} numberOfMonths={2}/></PopoverContent></Popover><FormMessage /></FormItem>)} />
-                                        <FormField control={form.control} name="initialBalance" render={({ field }) => (<FormItem><FormLabel>Bakiye (USDT)</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <FormField control={form.control} name="commission" render={({ field }) => (<FormItem><FormLabel>Komisyon (%)</FormLabel><FormControl><Input type="number" step="0.001" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
-                                            <FormField control={form.control} name="slippage" render={({ field }) => (<FormItem><FormLabel>Kayma (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
-                                        </div>
-                                        <Button type="submit" className="w-full" disabled={!!backtestProgress}>Backtest'i Başlat</Button>
-                                    </form>
-                                </Form>
-                           </div>
-                        ) : (
-                        <main className="flex-1 min-h-0">
-                            {backtestProgress ? (
-                                <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                <Loader2 className="h-12 w-12 animate-spin mb-4" />
-                                <h3 className="text-xl font-semibold">{backtestProgress.message}</h3>
-                                {backtestProgress.total > 0 && <p className="text-slate-500 mt-2">{backtestProgress.loaded} / {backtestProgress.total} mum</p>}
-                                </div>
-                            ) : activeBacktestResult ? (
-                            <div className="p-4 md:p-6 flex-1 min-h-0 grid grid-rows-[auto,1fr] gap-6 h-full">
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-                                    <div className="rounded-lg bg-slate-800/50 p-3">
-                                        <p className="text-xs text-slate-400">Net Kâr</p>
-                                        <p className={`text-lg font-bold ${(activeBacktestResult.stats.netProfit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>{(activeBacktestResult.stats.netProfit || 0).toFixed(2)}%</p>
-                                    </div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam İşlem</p><p className="text-lg font-bold">{activeBacktestResult.stats.totalTrades}</p></div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Başarı Oranı</p><p className="text-lg font-bold">{(activeBacktestResult.stats.winRate || 0).toFixed(1)}%</p></div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam Komisyon</p><p className="text-lg font-bold">${(activeBacktestResult.stats.totalCommissions || 0).toFixed(2)}</p></div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3">
-                                        <p className="text-xs text-slate-400">Kâr Faktörü</p>
-                                        <p className="text-lg font-bold">
-                                            {activeBacktestResult.stats.profitFactor && isFinite(activeBacktestResult.stats.profitFactor)
-                                                ? (activeBacktestResult.stats.profitFactor).toFixed(2)
-                                                : "∞"}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="w-full h-full">
-                                    <ResponsiveContainer width="100%" height="80%">
-                                         <ComposedChart 
-                                            syncId="backtestChart" 
-                                            data={chartAndTradeData}
-                                            onMouseMove={(state) => {
-                                                if (state.isTooltipActive) {
-                                                    setActiveChartIndex(state.activeTooltipIndex ?? null);
-                                                } else {
-                                                    setActiveChartIndex(null);
-                                                }
-                                            }}
-                                            onMouseLeave={() => setActiveChartIndex(null)}
-                                         >
-                                            <YAxis yAxisId="right" orientation="right" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
-                                            <Line yAxisId="right" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
-                                            <Tooltip content={<CustomTooltip />} />
-                                            <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                            <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                        </ComposedChart>
-                                    </ResponsiveContainer>
-                                    <ResponsiveContainer width="100%" height="20%">
-                                        <AreaChart syncId="backtestChart" data={activeBacktestResult.pnlData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                                            <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
-                                            <YAxis yAxisId="left" orientation="left" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                            <Tooltip content={<CustomTooltip />} />
-                                            <Area yAxisId="left" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" fillOpacity={0.3} />
-                                            <Brush dataKey="time" height={20} stroke="hsl(var(--primary))" travellerWidth={10} onChange={(e: any) => setActiveChartIndex(e.startIndex)} />
-                                            <XAxis dataKey="time" hide />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                            ) : (
-                               <div className="flex flex-col items-center justify-center h-full bg-slate-900 rounded-lg border border-dashed border-slate-700">
-                                    <Zap className="h-16 w-16 text-slate-600 mb-4" />
-                                    <h3 className="text-xl font-semibold text-slate-400">Backtest'e Hazır</h3>
-                                    <p className="text-slate-500 mt-2 text-center">Stratejinizin geçmiş performansını görmek için soldaki formu doldurun.</p>
-                                </div>
-                            )}
-                        </main>
-                        )}
-                     </div>
                 </div>
-            </div>
-        )}
+                 <div className="flex flex-1 min-h-0">
+                     <aside className="w-72 border-r border-slate-800 flex flex-col">
+                        <div className="p-4 border-b border-slate-800">
+                            <h3 className="font-semibold flex items-center gap-2"><History className="h-5 w-5"/>Geçmiş Testler</h3>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                            {backtestHistory.length === 0 && <p className="p-4 text-sm text-slate-500">Henüz backtest yapılmadı.</p>}
+                            <ul>
+                                {backtestHistory.map(run => (
+                                    <li key={run.id}>
+                                        <button 
+                                            onClick={() => handleSelectHistoryRun(run)}
+                                            className={cn(
+                                                "w-full text-left p-3 text-sm hover:bg-slate-800/50 transition-colors border-l-2 border-transparent",
+                                                activeBacktestRun?.id === run.id && "bg-slate-800 border-primary"
+                                            )}>
+                                            <div className="flex justify-between font-semibold">
+                                                <span>{run.params.symbol}</span>
+                                                <span className={run.result.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                                    {run.result.stats.netProfit >= 0 ? '+' : ''}{(run.result.stats.netProfit || 0).toFixed(2)}%
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-400">{run.params.timeframe} | {format(new Date(run.params.dateRange.from), 'dd.MM.yy')} - {format(new Date(run.params.dateRange.to), 'dd.MM.yy')}</p>
+                                            <p className="text-xs text-slate-500 mt-1">{format(new Date(run.id), 'dd MMMM yyyy, HH:mm')}</p>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                     </aside>
+                    {!activeBacktestResult && !backtestProgress ? (
+                       <div className="p-6 w-full max-w-md mx-auto">
+                            <h3 className="font-semibold text-lg flex items-center gap-2 mb-6"><Settings className="h-5 w-5" />Backtest Ayarları</h3>
+                            <Form {...form}>
+                                <form onSubmit={form.handleSubmit(handleRunBacktest)} className="space-y-6">
+                                    <FormField control={form.control} name="symbol" render={({ field }) => (<FormItem><FormLabel>İşlem Çifti</FormLabel><FormControl><Input {...field} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)} />
+                                    <FormField control={form.control} name="timeframe" render={({ field }) => (<FormItem><FormLabel>Zaman Dilimi</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="bg-slate-800 border-slate-700"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="1m">1 Dakika</SelectItem><SelectItem value="5m">5 Dakika</SelectItem><SelectItem value="15m">15 Dakika</SelectItem><SelectItem value="1h">1 Saat</SelectItem><SelectItem value="4h">4 Saat</SelectItem><SelectItem value="1d">1 Gün</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                                    <FormField control={form.control} name="dateRange" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Tarih Aralığı</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal bg-slate-800 border-slate-700 hover:bg-slate-700", !field.value && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{field.value?.from ? (field.value.to ? (<>{format(field.value.from, "LLL dd, y")} - {format(field.value.to, "LLL dd, y")}</>) : (format(field.value.from, "LLL dd, y"))) : (<span>Tarih seçin</span>)}</Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={field.value.from} selected={field.value} onSelect={field.onChange} numberOfMonths={2}/></PopoverContent></Popover><FormMessage /></FormItem>)} />
+                                    <FormField control={form.control} name="initialBalance" render={({ field }) => (<FormItem><FormLabel>Bakiye (USDT)</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <FormField control={form.control} name="commission" render={({ field }) => (<FormItem><FormLabel>Komisyon (%)</FormLabel><FormControl><Input type="number" step="0.001" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="slippage" render={({ field }) => (<FormItem><FormLabel>Kayma (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
+                                    </div>
+                                    <Button type="submit" className="w-full" disabled={!!backtestProgress}>Backtest'i Başlat</Button>
+                                </form>
+                            </Form>
+                       </div>
+                    ) : (
+                    <main className="flex-1 min-h-0">
+                        {backtestProgress ? (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                            <Loader2 className="h-12 w-12 animate-spin mb-4" />
+                            <h3 className="text-xl font-semibold">{backtestProgress.message}</h3>
+                            {backtestProgress.total > 0 && <p className="text-slate-500 mt-2">{backtestProgress.loaded} / {backtestProgress.total} mum</p>}
+                            </div>
+                        ) : activeBacktestResult ? (
+                        <div className="p-4 md:p-6 flex-1 min-h-0 grid grid-rows-[auto,1fr] gap-6 h-full">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                                <div className="rounded-lg bg-slate-800/50 p-3">
+                                    <p className="text-xs text-slate-400">Net Kâr</p>
+                                    <p className={`text-lg font-bold ${(activeBacktestResult.stats.netProfit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>{(activeBacktestResult.stats.netProfit || 0).toFixed(2)}%</p>
+                                </div>
+                                <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam İşlem</p><p className="text-lg font-bold">{activeBacktestResult.stats.totalTrades}</p></div>
+                                <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Başarı Oranı</p><p className="text-lg font-bold">{(activeBacktestResult.stats.winRate || 0).toFixed(1)}%</p></div>
+                                <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam Komisyon</p><p className="text-lg font-bold">${(activeBacktestResult.stats.totalCommissions || 0).toFixed(2)}</p></div>
+                                <div className="rounded-lg bg-slate-800/50 p-3">
+                                    <p className="text-xs text-slate-400">Kâr Faktörü</p>
+                                    <p className="text-lg font-bold">
+                                        {activeBacktestResult.stats.profitFactor && isFinite(activeBacktestResult.stats.profitFactor)
+                                            ? (activeBacktestResult.stats.profitFactor).toFixed(2)
+                                            : "∞"}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="w-full h-full">
+                                <ResponsiveContainer width="100%" height="80%">
+                                     <ComposedChart 
+                                        syncId="backtestChart" 
+                                        data={chartAndTradeData}
+                                        onMouseMove={(state) => {
+                                            if (state.isTooltipActive) {
+                                                setActiveChartIndex(state.activeTooltipIndex ?? null);
+                                            } else {
+                                                setActiveChartIndex(null);
+                                            }
+                                        }}
+                                        onMouseLeave={() => setActiveChartIndex(null)}
+                                     >
+                                        <YAxis yAxisId="right" orientation="right" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
+                                        <Line yAxisId="right" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
+                                        <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                                <ResponsiveContainer width="100%" height="20%">
+                                    <AreaChart syncId="backtestChart" data={activeBacktestResult.pnlData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                        <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
+                                        <YAxis yAxisId="left" orientation="left" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Area yAxisId="left" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" fillOpacity={0.3} />
+                                        <XAxis dataKey="time" hide />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                        ) : (
+                           <div className="flex flex-col items-center justify-center h-full bg-slate-900 rounded-lg border border-dashed border-slate-700">
+                                <Zap className="h-16 w-16 text-slate-600 mb-4" />
+                                <h3 className="text-xl font-semibold text-slate-400">Backtest'e Hazır</h3>
+                                <p className="text-slate-500 mt-2 text-center">Stratejinizin geçmiş performansını görmek için soldaki formu doldurun.</p>
+                            </div>
+                        )}
+                    </main>
+                    )}
+                 </div>
+            </SheetContent>
+        </Sheet>
+        
 
         {isSettingsModalOpen && (
              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
