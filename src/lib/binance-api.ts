@@ -87,7 +87,16 @@ export class BinanceAPI {
   async testCredentials(): Promise<{ valid: boolean; message: string }> {
     try {
       console.log("[BinanceAPI] Testing credentials by fetching account info...");
-      const accountInfo = await this.getAccountInfo();
+      
+      let accountInfo: any;
+      if (this.networkType === 'futures-testnet') {
+          // /fapi/v2/account for futures
+          accountInfo = await this.exchange.fapiPrivateGetAccount();
+      } else {
+          // /api/v3/account for spot
+          accountInfo = await this.exchange.privateGetAccount();
+      }
+      
       console.log("[BinanceAPI] Account info fetched successfully.");
 
       if (accountInfo.canTrade) {
@@ -113,10 +122,8 @@ export class BinanceAPI {
         
         let info;
         if (this.networkType === 'futures-testnet') {
-            // This calls /fapi/v2/account, which is correct for futures
-            info = await this.exchange.fetchBalance();
+            info = await this.exchange.fapiPrivateGetAccount();
         } else {
-            // This calls /api/v3/account for spot
             info = await this.exchange.privateGetAccount();
         }
 
