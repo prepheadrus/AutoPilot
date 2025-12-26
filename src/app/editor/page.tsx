@@ -28,6 +28,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceArea,
 } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { RSI as RSICalculator, SMA as SMACalculator } from 'technicalindicators';
@@ -77,41 +78,49 @@ const initialNodes: Node[] = [
   {
     id: '1',
     type: 'indicator',
-    position: { x: 50, y: 200 },
-    data: { label: 'RSI İndikatörü', indicatorType: 'rsi', period: 14 }
+    position: { x: 50, y: 100 },
+    data: { indicatorType: 'rsi', period: 14 }
+  },
+   {
+    id: '4',
+    type: 'indicator',
+    position: { x: 50, y: 300 },
+    data: { indicatorType: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 }
   },
   {
     id: '2a',
     type: 'logic',
     position: { x: 350, y: 100 },
-    data: { label: 'Alış Koşulu', operator: 'lt', value: 30 }
+    data: { logicType: 'compare', operator: 'lt', value: 30, input: 'value' }
   },
-  {
+   {
     id: '2b',
     type: 'logic',
     position: { x: 350, y: 300 },
-    data: { label: 'Satış Koşulu', operator: 'gt', value: 70 }
+    data: { logicType: 'compare', operator: 'gt', value: 0, input: 'histogram' }
+  },
+  {
+    id: '5',
+    type: 'logic',
+    position: { x: 600, y: 200 },
+    data: { logicType: 'AND' }
   },
   {
     id: '3a',
     type: 'action',
-    position: { x: 650, y: 100 },
-    data: { label: 'Alış Emri', actionType: 'buy' }
-  },
-  {
-    id: '3b',
-    type: 'action',
-    position: { x: 650, y: 300 },
-    data: { label: 'Satış Emri', actionType: 'sell' }
+    position: { x: 850, y: 200 },
+    data: { actionType: 'buy' }
   },
 ];
 
 const initialEdges: Edge[] = [
   { id: 'ed1-1', source: 'd1', target: '1', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'ed1-4', source: 'd1', target: '4', markerEnd: { type: MarkerType.ArrowClosed } },
   { id: 'e1-2a', source: '1', target: '2a', markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: 'e1-2b', source: '1', target: '2b', markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: 'e2a-3a', source: '2a', target: '3a', markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: 'e2b-3b', source: '2b', target: '3b', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'e4-2b', source: '4', target: '2b', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'e2a-5', source: '2a', target: '5', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'e2b-5', source: '2b', target: '5', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'e5-3a', source: '5', target: '3a', markerEnd: { type: MarkerType.ArrowClosed } },
 ];
 
 
@@ -174,7 +183,8 @@ const formatPrice = (price: number): string => {
 
 // --- START: Backtest Engine ---
 
-// The core backtesting engine
+type SignalCache = { [nodeId: string]: any[] };
+
 const runBacktestEngine = (
     ohlcv: any[],
     nodes: Node[],
@@ -184,66 +194,94 @@ const runBacktestEngine = (
     slippageRate: number
 ): BacktestResult | { error: string } => {
     
-    // 1. Find all data sources
-    const dataSourceNodes = nodes.filter(n => n.type === 'dataSource');
-    if (dataSourceNodes.length === 0) {
-        return { error: 'Lütfen stratejinize en az bir "Veri Kaynağı" düğümü ekleyin.' };
-    }
-
-    // Format incoming OHLCV data and extract prices
-    const formattedOhlc = ohlcv.map(candle => ({
-      time: new Date(candle[0]).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      timestamp: candle[0], // Keep original timestamp for matching
-      date: new Date(candle[0]),
-      open: candle[1],
-      high: candle[2],
-      low: candle[3],
-      close: candle[4],
-      price: candle[4], // Use close price as the main price point
-    }));
-    
-    const prices = formattedOhlc.map(d => d.price);
-
-    // 2. Calculate all indicators present on the graph
+    // --- 1. Pre-calculate all indicators ---
+    const prices = ohlcv.map(c => c[4]);
+    const indicatorCache: SignalCache = {};
     const indicatorNodes = nodes.filter(n => n.type === 'indicator');
-    const signals: Record<string, (number | undefined | { MACD?: number, signal?: number, histogram?: number })[]> = {};
 
     indicatorNodes.forEach(node => {
-        const sourceEdge = edges.find(e => e.target === node.id);
-        if (!sourceEdge) {
-            console.warn(`İndikatör "${node.id}" bir kaynağa bağlı değil.`);
-            signals[node.id] = [];
-            return;
-        }
-        
         const { indicatorType, period, fastPeriod, slowPeriod, signalPeriod } = node.data;
         let result: any[] = [];
+        
+        try {
+            if (indicatorType === 'rsi') {
+                result = RSICalculator.calculate({ values: prices, period: period || 14 });
+            } else if (indicatorType === 'sma' || indicatorType === 'ema') {
+                result = SMACalculator.calculate({ values: prices, period: period || 20 });
+            } else if (indicatorType === 'macd') {
+                result = calculateMACD(prices, fastPeriod, slowPeriod, signalPeriod);
+            }
+        } catch (e) {
+            console.error(`Error calculating ${indicatorType} for node ${node.id}:`, e);
+            result = []; // Ensure result is an array even on error
+        }
 
-        if (indicatorType === 'rsi') {
-            result = RSICalculator.calculate({ values: prices, period: period || 14 });
-        } else if (indicatorType === 'sma' || indicatorType === 'ema') {
-            result = SMACalculator.calculate({ values: prices, period: period || 20 });
-        } else if (indicatorType === 'macd') {
-            result = calculateMACD(prices, fastPeriod, slowPeriod, signalPeriod);
+        const padding = Array(prices.length - result.length).fill(undefined);
+        indicatorCache[node.id] = padding.concat(result);
+    });
+
+    // --- 2. Recursive Logic Solver ---
+    const memo: { [key: string]: boolean } = {};
+    const evaluateNode = (nodeId: string, candleIndex: number): boolean => {
+        const memoKey = `${nodeId}-${candleIndex}`;
+        if (memo[memoKey] !== undefined) return memo[memoKey];
+
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return false;
+
+        const incomingEdges = edges.filter(e => e.target === nodeId);
+        
+        if (node.type === 'logic') {
+            const { logicType } = node.data;
+
+            if (logicType === 'compare') {
+                const indicatorEdge = incomingEdges[0];
+                if (!indicatorEdge) return false;
+                
+                const indicatorNodeId = indicatorEdge.source;
+                const fullIndicatorValue = indicatorCache[indicatorNodeId]?.[candleIndex];
+                if (fullIndicatorValue === undefined) return false;
+
+                const { operator, value: thresholdValue, input: dataKey } = node.data;
+                
+                // Select the correct value from the indicator output (e.g., 'macd', 'histogram' or just the value itself)
+                const indicatorValue = (dataKey && typeof fullIndicatorValue === 'object') 
+                    ? fullIndicatorValue[dataKey] 
+                    : fullIndicatorValue;
+                
+                if (typeof indicatorValue !== 'number') return false;
+
+                switch (operator) {
+                    case 'gt': memo[memoKey] = indicatorValue > thresholdValue; break;
+                    case 'lt': memo[memoKey] = indicatorValue < thresholdValue; break;
+                    default: memo[memoKey] = false;
+                }
+                return memo[memoKey];
+            }
+            
+            if (logicType === 'AND') {
+                if (incomingEdges.length < 2) return false; // AND needs at least 2 inputs
+                const result = incomingEdges.every(edge => evaluateNode(edge.source, candleIndex));
+                memo[memoKey] = result;
+                return result;
+            }
+
+            if (logicType === 'OR') {
+                 if (incomingEdges.length < 1) return false;
+                 const result = incomingEdges.some(edge => evaluateNode(edge.source, candleIndex));
+                 memo[memoKey] = result;
+                 return result;
+            }
         }
         
-        const padding = Array(prices.length - result.length).fill(undefined);
-        signals[node.id] = padding.concat(result);
-    });
-    
-    const chartDataWithIndicators = formattedOhlc.map((d, i) => {
-        const enrichedData: any = { ...d };
-        for (const nodeId in signals) {
-            enrichedData[nodeId] = signals[nodeId][i];
-        }
-        return enrichedData;
-    });
+        return false;
+    };
 
-    // 3. Trading Simulation
+    // --- 3. Trading Simulation ---
     let inPosition = false;
     let entryPrice = 0;
     let portfolioValue = initialBalance;
-    const pnlData = [{ time: new Date(ohlcv[0][0] - 3600*1000).toLocaleDateString('tr-TR'), pnl: portfolioValue }];
+    const pnlData: { time: string; pnl: number }[] = [{ time: new Date(ohlcv[0][0] - 3600*1000).toLocaleDateString('tr-TR'), pnl: portfolioValue }];
     const trades: {timestamp: number, type: 'buy' | 'sell', price: number}[] = [];
     let peakPortfolio = portfolioValue;
     let maxDrawdown = 0;
@@ -254,67 +292,40 @@ const runBacktestEngine = (
     let totalCommissions = 0;
     const actionNodes = nodes.filter(n => n.type === 'action');
 
-    const checkConditionsForAction = (candleIndex: number, actionNodeId: string): boolean => {
-        const connectedLogicEdges = edges.filter(e => e.target === actionNodeId);
-        if (connectedLogicEdges.length === 0) return false;
-
-        return connectedLogicEdges.every(edge => {
-            const logicNode = nodes.find(n => n.id === edge.source);
-            if (!logicNode || logicNode.type !== 'logic') return false;
-
-            const connectedIndicatorEdges = edges.filter(e => e.target === logicNode.id);
-            if (connectedIndicatorEdges.length === 0) return false;
-            
-            return connectedIndicatorEdges.every(indEdge => {
-                const indicatorNode = nodes.find(n => n.id === indEdge.source);
-                if (!indicatorNode) return false;
-
-                let indicatorValue = signals[indicatorNode.id]?.[candleIndex];
-                if (indicatorValue === undefined) return false;
-                
-                if (typeof indicatorValue === 'object' && indicatorValue.MACD !== undefined) {
-                    indicatorValue = indicatorValue.MACD;
-                }
-                
-                if (typeof indicatorValue !== 'number') return false;
-
-                const { operator, value: thresholdValue } = logicNode.data;
-                
-                switch (operator) {
-                    case 'gt': return indicatorValue > thresholdValue;
-                    case 'lt': return indicatorValue < thresholdValue;
-                    default: return false;
-                }
-            });
-        });
-    };
-
-    for (let i = 1; i < chartDataWithIndicators.length; i++) {
-        const candle = chartDataWithIndicators[i];
-        const buyAction = actionNodes.find(n => n.data.actionType === 'buy');
-        const sellAction = actionNodes.find(n => n.data.actionType === 'sell');
+    for (let i = 1; i < prices.length; i++) {
+        const candle = ohlcv[i];
         
+        // --- Find Buy/Sell decisions by evaluating action nodes ---
         let shouldBuy = false;
-        if (buyAction) {
-            shouldBuy = checkConditionsForAction(i, buyAction.id);
+        const buyActionNode = actionNodes.find(n => n.data.actionType === 'buy');
+        if (buyActionNode) {
+            const buyEdge = edges.find(e => e.target === buyActionNode.id);
+            if (buyEdge) {
+                shouldBuy = evaluateNode(buyEdge.source, i);
+            }
         }
 
         let shouldSell = false;
-        if (sellAction) {
-            shouldSell = checkConditionsForAction(i, sellAction.id);
+        const sellActionNode = actionNodes.find(n => n.data.actionType === 'sell');
+        if (sellActionNode) {
+            const sellEdge = edges.find(e => e.target === sellActionNode.id);
+            if (sellEdge) {
+                shouldSell = evaluateNode(sellEdge.source, i);
+            }
         }
 
+        const currentPrice = candle[4];
         if (shouldBuy && !inPosition) {
-            const buyPrice = candle.price * (1 + slippageRate / 100);
+            const buyPrice = currentPrice * (1 + slippageRate / 100);
             const commission = portfolioValue * (commissionRate / 100);
             portfolioValue -= commission;
             totalCommissions += commission;
             
             inPosition = true;
             entryPrice = buyPrice;
-            trades.push({ timestamp: candle.timestamp, type: 'buy', price: buyPrice });
+            trades.push({ timestamp: candle[0], type: 'buy', price: buyPrice });
         } else if (shouldSell && inPosition) {
-            const sellPrice = candle.price * (1 - slippageRate / 100);
+            const sellPrice = currentPrice * (1 - slippageRate / 100);
             const profit = (sellPrice - entryPrice) / entryPrice;
             const positionValue = portfolioValue * (1 + profit);
             const commission = positionValue * (commissionRate / 100);
@@ -323,18 +334,18 @@ const runBacktestEngine = (
             portfolioValue = positionValue - commission;
             
             if (profit > 0) {
-                totalProfit += profit * portfolioValue; // Gross profit for profit factor
+                totalProfit += profit * portfolioValue;
                 winningTrades++;
             } else {
-                totalLoss += Math.abs(profit * portfolioValue); // Gross loss for profit factor
+                totalLoss += Math.abs(profit * portfolioValue);
                 losingTrades++;
             }
 
             inPosition = false;
-            trades.push({ timestamp: candle.timestamp, type: 'sell', price: sellPrice });
+            trades.push({ timestamp: candle[0], type: 'sell', price: sellPrice });
         }
 
-        pnlData.push({ time: candle.time, pnl: portfolioValue });
+        pnlData.push({ time: new Date(candle[0]).toLocaleDateString('tr-TR'), pnl: portfolioValue });
 
         if (portfolioValue > peakPortfolio) {
             peakPortfolio = portfolioValue;
@@ -353,31 +364,36 @@ const runBacktestEngine = (
       maxDrawdown: maxDrawdown * 100,
       profitFactor: totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : null,
       totalCommissions: totalCommissions
-    }
+    };
 
-    const finalChartData = chartDataWithIndicators.map((d, i) => {
-        const dataPoint: any = {...d};
+    const formattedOhlc = ohlcv.map((c, i) => {
+        const enrichedData: any = {
+            time: new Date(c[0]).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+            timestamp: c[0],
+            date: new Date(c[0]),
+            open: c[1], high: c[2], low: c[3], close: c[4], price: c[4]
+        };
         indicatorNodes.forEach(node => {
             let key;
-            const signal = signals[node.id]?.[i];
-
+            const signal = indicatorCache[node.id]?.[i];
             if (node.data.indicatorType === 'macd') {
                 key = `MACD(${node.data.fastPeriod || 12},${node.data.slowPeriod || 26},${node.data.signalPeriod || 9})`;
                 if(typeof signal === 'object' && signal !== null) {
-                    dataPoint[`${key}_MACD`] = signal.MACD;
-                    dataPoint[`${key}_Signal`] = signal.signal;
-                    dataPoint[`${key}_Hist`] = signal.histogram;
+                    enrichedData[`${key}_MACD`] = signal.MACD;
+                    enrichedData[`${key}_Signal`] = signal.signal;
+                    enrichedData[`${key}_Hist`] = signal.histogram;
                 }
             } else {
                 key = `${node.data.indicatorType.toUpperCase()}(${node.data.period})`;
-                dataPoint[key] = signal;
+                enrichedData[key] = signal;
             }
         });
-        return dataPoint;
+        return enrichedData;
     });
 
-    return { ohlcData: finalChartData, tradeData: trades, pnlData, stats };
+    return { ohlcData: formattedOhlc, tradeData: trades, pnlData, stats };
 };
+// --- END: Backtest Engine ---
 
 const TradeArrowDot = (props: any) => {
     const { cx, cy, payload } = props;
@@ -388,24 +404,25 @@ const TradeArrowDot = (props: any) => {
 
     const isBuy = payload.tradeMarker.type === 'buy';
     const color = isBuy ? '#22c55e' : '#ef4444'; // green-500, red-500
-    const price = payload.price;
-
+    
     // Position arrow relative to the candle's high/low
-    const arrowY = isBuy ? (cy ?? 0) + 15 : (cy ?? 0) - 15;
+    const arrowY = isBuy ? payload.low - Math.abs(payload.high-payload.low)*0.2 : payload.high + Math.abs(payload.high-payload.low)*0.2;
     const finalCX = cx ?? 0;
 
     const points = isBuy
-        ? `${finalCX - 6},${arrowY + 6} ${finalCX},${arrowY} ${finalCX + 6},${arrowY + 6}` // Up arrow below
-        : `${finalCX - 6},${arrowY - 6} ${finalCX},${arrowY} ${finalCX + 6},${arrowY - 6}`; // Down arrow above
+        ? `${finalCX - 6},${arrowY + 6} ${finalCX},${arrowY} ${finalCX + 6},${arrowY + 6}` // Up arrow
+        : `${finalCX - 6},${arrowY - 6} ${finalCX},${arrowY} ${finalCX + 6},${arrowY - 6}`; // Down arrow
 
     return (
-        <polygon
-            points={points}
-            fill={color}
-            stroke="#000"
-            strokeWidth={0.5}
-            style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))', pointerEvents: 'none' }}
-        />
+        <g>
+            <polygon
+                points={points}
+                fill={color}
+                stroke="#000"
+                strokeWidth={0.5}
+                style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))', pointerEvents: 'none' }}
+            />
+        </g>
     );
 };
 
@@ -442,7 +459,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
     }
     return null;
 };
-// --- END: Backtest Engine ---
+
 
 const proOptions = { hideAttribution: true };
 
@@ -461,7 +478,9 @@ function StrategyEditorPage() {
   const activeBacktestResult = activeBacktestRun?.result || null;
   
   const [editingBotId, setEditingBotId] = useState<number | null>(null);
+
   const [brushTimeframe, setBrushTimeframe] = useState<any>(null);
+
   
   const { toast } = useToast();
   const router = useRouter();
@@ -628,9 +647,8 @@ function StrategyEditorPage() {
   }), []); 
 
 
-  const addNode = useCallback((type: string) => {
+  const addNode = useCallback((type: string, logicType?: string) => {
     const newNodeId = `${type}-${Date.now()}`;
-    let nodeLabel = "Yeni Düğüm";
     let nodeData = {};
     
     const position = {
@@ -639,17 +657,13 @@ function StrategyEditorPage() {
     };
 
     if (type === 'dataSource') {
-        nodeLabel = 'Veri Kaynağı';
-        nodeData = { label: nodeLabel, exchange: 'binance', symbol: 'BTC/USDT' };
+        nodeData = { label: 'Veri Kaynağı', exchange: 'binance', symbol: 'BTC/USDT' };
     } else if (type === 'indicator') {
-      nodeLabel = 'Yeni İndikatör';
-      nodeData = { label: nodeLabel, indicatorType: 'rsi', period: 14 };
+      nodeData = { indicatorType: 'rsi', period: 14 };
     } else if (type === 'logic') {
-      nodeLabel = 'Yeni Koşul';
-      nodeData = { label: nodeLabel, operator: 'lt', value: 30 };
+      nodeData = { logicType: logicType || 'compare', operator: 'lt', value: 30 };
     } else if (type === 'action') {
-      nodeLabel = 'Yeni İşlem';
-      nodeData = { label: nodeLabel, actionType: 'buy' };
+      nodeData = { actionType: 'buy' };
     }
 
     const newNode: Node = {
@@ -923,16 +937,19 @@ function StrategyEditorPage() {
         <aside className="w-64 flex-shrink-0 border-r border-slate-800 bg-slate-900 p-4 flex flex-col gap-2">
             <h3 className="font-bold text-lg text-foreground mb-4 font-headline">Araç Kutusu</h3>
              <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('dataSource')}>
-                <Database className="text-yellow-500" /> Veri Kaynağı Ekle
+                <Database className="text-yellow-500" /> Veri Kaynağı
             </Button>
              <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('indicator')}>
-                <Rss className="text-blue-500" /> İndikatör Ekle
+                <Rss className="text-blue-500" /> İndikatör
             </Button>
-            <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('logic')}>
-                <GitBranch className="text-purple-500" /> Mantık Ekle
+            <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('logic', 'compare')}>
+                <GitBranch className="text-purple-500" /> Koşul
+            </Button>
+            <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('logic', 'AND')}>
+                <GitBranch className="text-purple-500" /> VE (AND)
             </Button>
             <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('action')}>
-                <CircleDollarSign className="text-green-500" /> İşlem Ekle
+                <CircleDollarSign className="text-green-500" /> İşlem
             </Button>
         </aside>
 
@@ -1060,14 +1077,16 @@ function StrategyEditorPage() {
                                     </div>
                                 </div>
                                 <div className="w-full h-full">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <ComposedChart data={chartAndTradeData} syncId="backtestChart">
+                                    <ResponsiveContainer width="100%" height="80%">
+                                        <ComposedChart data={chartAndTradeData} syncId="backtestChart" onMouseDown={(e) => {}} onMouseMove={(e) => {}} onMouseUp={() => {}}>
                                             <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                            <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                            <YAxis yAxisId="price" orientation="right" tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
+                                            <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" allowDataOverflow domain={['dataMin', 'dataMax']} />
+                                            <YAxis yAxisId="price" orientation="right" tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" allowDataOverflow domain={['dataMin', 'dataMax']} />
+                                            <YAxis yAxisId="pnl" orientation="left" tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" allowDataOverflow domain={['dataMin', 'dataMax']} />
                                             <Tooltip content={<CustomTooltip />} />
                                             <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                            <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
+                                            <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={1} dot={<TradeArrowDot />} activeDot={false} />
+                                            <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" fillOpacity={0.3} />
                                             
                                             {indicatorKeys.filter(k => !k.startsWith('MACD')).map((key, i) => (
                                                 <Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={`hsl(var(--chart-${(i+2)%5+1}))`} strokeWidth={1} dot={false} />
@@ -1076,28 +1095,12 @@ function StrategyEditorPage() {
                                         </ComposedChart>
                                     </ResponsiveContainer>
 
-                                    {hasMACD && (
-                                        <ResponsiveContainer width="100%" height="30%">
-                                             <ComposedChart data={chartAndTradeData} syncId="backtestChart">
-                                                 <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                                 <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                                 <YAxis yAxisId="macd" orientation="right" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                                 <Tooltip content={<CustomTooltip />} />
-                                                 <Legend />
-                                                 <Line yAxisId="macd" type="monotone" dataKey={indicatorKeys.find(k=>k.includes("_MACD"))} name="MACD" stroke="hsl(var(--chart-4))" dot={false} />
-                                                 <Line yAxisId="macd" type="monotone" dataKey={indicatorKeys.find(k=>k.includes("_Signal"))} name="Signal" stroke="hsl(var(--chart-5))" dot={false} />
-                                                 <Bar yAxisId="macd" dataKey={indicatorKeys.find(k=>k.includes("_Hist"))} name="Histogram" fill="rgba(136, 132, 216, 0.4)" />
-                                            </ComposedChart>
-                                        </ResponsiveContainer>
-                                    )}
-
-                                    <ResponsiveContainer width="100%" height={hasMACD ? "20%" : "30%"}>
-                                        <AreaChart data={chartAndTradeData} syncId="backtestChart">
-                                            <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
-                                            <YAxis yAxisId="pnl" orientation="right" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                    <ResponsiveContainer width="100%" height="20%">
+                                        <AreaChart data={chartAndTradeData} syncId="backtestChart" margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                             <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
+                                            <YAxis yAxisId="pnl" orientation="left" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
                                             <Tooltip content={<CustomTooltip />} />
-                                            <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
-                                            <Brush dataKey="time" height={20} stroke="hsl(var(--primary))" travellerWidth={10} />
+                                            <Brush dataKey="time" height={20} stroke="hsl(var(--primary))" travellerWidth={10} onChange={setBrushTimeframe}/>
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
