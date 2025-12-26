@@ -33,7 +33,8 @@ export interface AccountInfo extends ccxt.Account {}
 
 /**
  * Binance API Client powered by CCXT
- * Supports Mainnet, Spot Testnet, and Futures Testnet by leveraging ccxt's sandbox mode.
+ * This class is designed to interact with Binance's Mainnet, Spot Testnet, and Futures Testnet
+ * by leveraging ccxt's built-in sandbox and market type options.
  */
 export class BinanceAPI {
   private exchange: Exchange;
@@ -42,24 +43,23 @@ export class BinanceAPI {
   constructor(credentials: BinanceCredentials) {
     this.networkType = credentials.networkType || (credentials.testnet ? 'spot-testnet' : 'mainnet');
 
+    const isFutures = this.networkType === 'futures-testnet';
+    const isTestnet = this.networkType !== 'mainnet';
+
     // Instantiate the exchange
     this.exchange = new (ccxt as any).binance({
       apiKey: credentials.apiKey,
       secret: credentials.apiSecret,
+      options: {
+        defaultType: isFutures ? 'future' : 'spot',
+      },
     });
 
-    // Enable sandbox mode for testnets
-    if (this.networkType === 'spot-testnet' || this.networkType === 'futures-testnet') {
+    // Enable sandbox mode for all testnets
+    if (isTestnet) {
       this.exchange.setSandboxMode(true);
     }
-
-    // Set the default market type (futures or spot)
-    if (this.networkType === 'futures-testnet') {
-      this.exchange.options['defaultType'] = 'future';
-    } else {
-      this.exchange.options['defaultType'] = 'spot';
-    }
-
+    
     console.log(`[BinanceAPI] Initialized for ${this.networkType}. Sandbox: ${this.exchange.sandbox}. Default Type: ${this.exchange.options.defaultType}`);
   }
 
