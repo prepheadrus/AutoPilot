@@ -51,6 +51,16 @@ const statusConfig: Record<BotStatus, { badge: "default" | "secondary" | "destru
     "Hata": { badge: "destructive", dot: "bg-red-500", icon: <Play className="h-4 w-4" />, action: "Tekrar Dene" }
 };
 
+const formatPrice = (price: number): string => {
+    if (price >= 1) {
+        return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (price >= 0.01) {
+        return price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    }
+    return price.toPrecision(4);
+};
+
 // Helper to generate mock performance data for the detail panel chart
 const generateBotPerformanceData = (bot: BotType) => {
     const data = [];
@@ -115,11 +125,11 @@ export default function BotStatusPage() {
                     const profit = (currentPrice - (config.entryPrice || currentPrice)) * (config.positionSize || 0);
                     const newCurrentBalance = (config.currentBalance || 0) + profit;
                     newPnl = ((newCurrentBalance - (config.initialBalance || 10000)) / (config.initialBalance || 10000)) * 100;
-                    logMessage = `[${b.name}] [PAPER] SATIŞ @ ${currentPrice.toFixed(2)}. K&Z: ${profit.toFixed(2)}$`;
+                    logMessage = `[${b.name}] [PAPER] SATIŞ @ ${formatPrice(currentPrice)}. K&Z: ${profit.toFixed(2)}$`;
                     addLog('trade', logMessage);
                     newConfig = { ...newConfig, inPosition: false, entryPrice: undefined, currentBalance: newCurrentBalance };
                 } else if (!config.inPosition && decision === 'buy') {
-                    logMessage = `[${b.name}] [PAPER] ALIŞ @ ${currentPrice.toFixed(2)}.`;
+                    logMessage = `[${b.name}] [PAPER] ALIŞ @ ${formatPrice(currentPrice)}.`;
                     addLog('trade', logMessage);
                     const positionSize = (config.amount || 100) / currentPrice;
                     newConfig = { ...newConfig, inPosition: true, entryPrice: currentPrice, positionSize };

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useCallback, useMemo, useEffect, Suspense } from 'react';
@@ -139,6 +140,16 @@ const initialStrategyConfig: BotConfig = {
     amount: 100,
     leverage: 1,
     initialBalance: 10000,
+};
+
+const formatPrice = (price: number): string => {
+    if (price >= 1) {
+        return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (price >= 0.01) {
+        return price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    }
+    return price.toPrecision(4);
 };
 
 // --- START: Backtest Engine ---
@@ -348,7 +359,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
         return (
             <div className="p-2 bg-slate-800/80 border border-slate-700 rounded-md text-white text-xs backdrop-blur-sm">
                 <p className="font-bold">{`Tarih: ${label}`}</p>
-                {data.price && <p>Fiyat: <span className="font-mono">${data.price.toFixed(2)}</span></p>}
+                {data.price && <p>Fiyat: <span className="font-mono">${formatPrice(data.price)}</span></p>}
                 {payload.find(p => p.dataKey === 'pnl') && <p>Kâr: <span className="font-mono">${data.pnl.toFixed(2)}</span></p>}
 
                 {Object.keys(data)
@@ -364,7 +375,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
 
                 {data.tradeMarker && data.tradeMarker.type && (
                     <p className={`font-bold mt-2 ${data.tradeMarker.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-                        {data.tradeMarker.type.toUpperCase()} @ ${data.tradeMarker.price?.toFixed(2)}
+                        {data.tradeMarker.type.toUpperCase()} @ ${formatPrice(data.tradeMarker.price)}
                     </p>
                 )}
             </div>

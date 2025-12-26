@@ -25,6 +25,16 @@ declare global {
     }
 }
 
+const formatPrice = (price: number): string => {
+    if (price >= 1) {
+        return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (price >= 0.01) {
+        return price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    }
+    return price.toPrecision(4);
+};
+
 // TradingView Iframe Embed - Force Binance by URL
 const TradingViewWidget = memo(({ symbol }: { symbol: string }) => {
     // Format symbol for Binance - handle both "BTC/USDT" and "BTCUSDT" formats
@@ -129,7 +139,7 @@ const MarketList = memo(({ coins, favorites, selectedSymbol, onSelectSymbol, onT
                            <span className="text-xs text-muted-foreground">{coin.name}</span>
                         </div>
                         <div className="flex flex-col items-end">
-                            <span className="font-mono price-transition">${coin.price < 0.01 ? coin.price.toPrecision(2) : coin.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="font-mono price-transition">${formatPrice(coin.price)}</span>
                             <span className={cn(
                                 "font-mono text-xs price-transition",
                                 coin.change >= 0 ? "text-green-500" : "text-red-500"
