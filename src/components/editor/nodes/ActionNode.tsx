@@ -55,8 +55,8 @@ export function ActionNode({ data, id }: NodeProps<{ label: string, actionType?:
                     <SelectValue placeholder="İşlem seçin" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-600 text-white">
-                    <SelectItem value="buy">Al</SelectItem>
-                    <SelectItem value="sell">Sat</SelectItem>
+                    <SelectItem value="buy">Al (Buy)</SelectItem>
+                    <SelectItem value="sell">Sat (Sell)</SelectItem>
                 </SelectContent>
             </Select>
         </div>

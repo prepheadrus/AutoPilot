@@ -151,6 +151,7 @@ type BacktestResult = {
     profitFactor: number | null;
     totalCommissions: number;
   };
+  simulationCache?: SimulationCache;
 };
 
 type BacktestProgress = {
@@ -183,7 +184,9 @@ const formatPrice = (price: number): string => {
 
 // --- START: Backtest Engine ---
 
-type SignalCache = { [nodeId: string]: any[] };
+// Cache to store results of every node for every candle
+// `simulationCache[candleIndex][nodeId] = result`
+type SimulationCache = Record<number, Record<string, any>>;
 
 const runBacktestEngine = (
     ohlcv: any[],
@@ -196,7 +199,7 @@ const runBacktestEngine = (
     
     // --- 1. Pre-calculate all indicators ---
     const prices = ohlcv.map(c => c[4]);
-    const indicatorCache: SignalCache = {};
+    const indicatorCache: Record<string, any[]> = {};
     const indicatorNodes = nodes.filter(n => n.type === 'indicator');
 
     indicatorNodes.forEach(node => {
@@ -221,7 +224,9 @@ const runBacktestEngine = (
     });
 
     // --- 2. Recursive Logic Solver ---
-    const memo: { [key: string]: boolean } = {};
+    const memo: { [key: string]: any } = {};
+    const simulationCache: SimulationCache = {};
+
     const evaluateNode = (nodeId: string, candleIndex: number): boolean => {
         const memoKey = `${nodeId}-${candleIndex}`;
         if (memo[memoKey] !== undefined) return memo[memoKey];
@@ -230,6 +235,15 @@ const runBacktestEngine = (
         if (!node) return false;
 
         const incomingEdges = edges.filter(e => e.target === nodeId);
+        let result = false;
+
+        if (node.type === 'indicator') {
+             // An indicator node itself doesn't return a boolean, its value is used by a logic node.
+             // But for caching purposes, we store its raw value.
+             const indicatorValue = indicatorCache[nodeId]?.[candleIndex];
+             simulationCache[candleIndex] = { ...simulationCache[candleIndex], [nodeId]: indicatorValue };
+             return false; // Not a boolean signal
+        }
         
         if (node.type === 'logic') {
             const { logicType } = node.data;
@@ -238,8 +252,8 @@ const runBacktestEngine = (
                 const indicatorEdge = incomingEdges[0];
                 if (!indicatorEdge) return false;
                 
-                const indicatorNodeId = indicatorEdge.source;
-                const fullIndicatorValue = indicatorCache[indicatorNodeId]?.[candleIndex];
+                // We don't evaluate the indicator node, we just get its cached value
+                const fullIndicatorValue = indicatorCache[indicatorEdge.source]?.[candleIndex];
                 if (fullIndicatorValue === undefined) return false;
 
                 const { operator, value: thresholdValue, input: dataKey } = node.data;
@@ -251,30 +265,28 @@ const runBacktestEngine = (
                 if (typeof indicatorValue !== 'number') return false;
 
                 switch (operator) {
-                    case 'gt': memo[memoKey] = indicatorValue > thresholdValue; break;
-                    case 'lt': memo[memoKey] = indicatorValue < thresholdValue; break;
-                    default: memo[memoKey] = false;
+                    case 'gt': result = indicatorValue > thresholdValue; break;
+                    case 'lt': result = indicatorValue < thresholdValue; break;
+                    default: result = false;
                 }
-                return memo[memoKey];
-            }
-            
-            if (logicType === 'AND') {
-                if (incomingEdges.length < 2) return false; // AND needs at least 2 inputs
-                const result = incomingEdges.every(edge => evaluateNode(edge.source, candleIndex));
-                memo[memoKey] = result;
-                return result;
-            }
-
-            if (logicType === 'OR') {
-                 if (incomingEdges.length < 1) return false;
-                 const result = incomingEdges.some(edge => evaluateNode(edge.source, candleIndex));
-                 memo[memoKey] = result;
-                 return result;
+            } else if (logicType === 'AND') {
+                if (incomingEdges.length < 2) result = false;
+                else result = incomingEdges.every(edge => evaluateNode(edge.source, candleIndex));
+            } else if (logicType === 'OR') {
+                 if (incomingEdges.length < 1) result = false;
+                 else result = incomingEdges.some(edge => evaluateNode(edge.source, candleIndex));
             }
         }
-        
-        return false;
+
+        memo[memoKey] = result;
+        simulationCache[candleIndex] = { ...simulationCache[candleIndex], [nodeId]: result };
+        return result;
     };
+
+    // Initialize cache
+    for (let i = 0; i < prices.length; i++) {
+        simulationCache[i] = {};
+    }
 
     // --- 3. Trading Simulation ---
     let inPosition = false;
@@ -300,6 +312,7 @@ const runBacktestEngine = (
             const buyEdge = edges.find(e => e.target === buyActionNode.id);
             if (buyEdge) {
                 shouldBuy = evaluateNode(buyEdge.source, i);
+                 simulationCache[i][buyActionNode.id] = shouldBuy;
             }
         }
 
@@ -309,8 +322,12 @@ const runBacktestEngine = (
             const sellEdge = edges.find(e => e.target === sellActionNode.id);
             if (sellEdge) {
                 shouldSell = evaluateNode(sellEdge.source, i);
+                simulationCache[i][sellActionNode.id] = shouldSell;
             }
         }
+
+        // Evaluate all nodes for caching purposes, even if no trade happens
+        nodes.forEach(node => evaluateNode(node.id, i));
 
         const currentPrice = candle[4];
         if (shouldBuy && !inPosition) {
@@ -389,7 +406,7 @@ const runBacktestEngine = (
         return enrichedData;
     });
 
-    return { ohlcData: formattedOhlc, tradeData: trades, pnlData, stats };
+    return { ohlcData: formattedOhlc, tradeData: trades, pnlData, stats, simulationCache };
 };
 // --- END: Backtest Engine ---
 
@@ -408,8 +425,8 @@ const TradeArrowDot = (props: any) => {
     const finalCX = cx ?? 0;
 
     const points = isBuy
-        ? `${finalCX - 6},${arrowY + 6} ${finalCX},${arrowY} ${finalCX + 6},${arrowY + 6}` // Up arrow
-        : `${finalCX - 6},${arrowY - 6} ${finalCX},${arrowY} ${finalCX + 6},${arrowY - 6}`; // Down arrow
+        ? `${finalCX - 5},${arrowY + 5} ${finalCX},${arrowY} ${finalCX + 5},${arrowY + 5}` // Up arrow
+        : `${finalCX - 5},${arrowY - 5} ${finalCX},${arrowY} ${finalCX + 5},${arrowY - 5}`; // Down arrow
 
     return (
         <g>
@@ -417,7 +434,7 @@ const TradeArrowDot = (props: any) => {
                 points={points}
                 fill={color}
                 stroke="#000"
-                strokeWidth={0.5}
+                strokeWidth={1}
                 style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))', pointerEvents: 'none' }}
             />
         </g>
@@ -477,8 +494,7 @@ function StrategyEditorPage() {
   
   const [editingBotId, setEditingBotId] = useState<number | null>(null);
 
-  const [brushTimeframe, setBrushTimeframe] = useState<any>(null);
-
+  const [activeChartIndex, setActiveChartIndex] = useState<number | null>(null);
   
   const { toast } = useToast();
   const router = useRouter();
@@ -595,10 +611,13 @@ function StrategyEditorPage() {
     }
   }, [searchParams, setNodes, setEdges, router, toast]);
 
-  const onConnect = useCallback(
-    (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
+    const onConnect = useCallback(
+    (params: Connection | Edge) => {
+        const newEdge = { ...params, animated: false, markerEnd: { type: MarkerType.ArrowClosed }};
+        setEdges((eds) => addEdge(newEdge, eds));
+    },
     [setEdges],
-  );
+    );
   
   const handleOptimizePeriod = (nodeId: string) => {
     const nodeToOptimize = nodes.find(n => n.id === nodeId);
@@ -889,19 +908,19 @@ function StrategyEditorPage() {
     setActiveBacktestRun(null);
     setBacktestProgress(null);
     setReportModalOpen(true);
+    setActiveChartIndex(null);
   }
 
   const closeReportModal = () => {
     setReportModalOpen(false);
     setActiveBacktestRun(null);
     setBacktestProgress(null);
-    setBrushTimeframe(null);
     router.replace('/editor', { scroll: false });
   }
 
   const handleSelectHistoryRun = (run: BacktestRun) => {
     setActiveBacktestRun(run);
-    setBrushTimeframe(null);
+    setActiveChartIndex(null);
   }
 
   const chartAndTradeData = useMemo(() => {
@@ -921,13 +940,38 @@ function StrategyEditorPage() {
     });
   }, [activeBacktestResult]);
   
-  const indicatorKeys = useMemo(() => {
-    if (!activeBacktestResult?.ohlcData[0]) return [];
-    return Object.keys(activeBacktestResult.ohlcData[0]).filter(k => k.includes('('));
-  }, [activeBacktestResult]);
+  // This is the core of the visual feedback feature
+  useEffect(() => {
+    if (!activeChartIndex || !activeBacktestResult?.simulationCache) {
+      // If no candle is hovered, revert to default edge style
+      setEdges((eds) => eds.map(edge => ({
+        ...edge,
+        animated: false,
+        style: { stroke: '#606b7d', strokeWidth: 2 }, // Default color
+      })));
+      return;
+    }
 
-  const hasMACD = indicatorKeys.some(k => k.startsWith('MACD'));
-  const hasOscillator = indicatorKeys.some(k => k.startsWith('RSI') || k.startsWith('SMA') || k.startsWith('EMA'));
+    const currentCandleCache = activeBacktestResult.simulationCache[activeChartIndex];
+    if (!currentCandleCache) return;
+
+    const newEdges = edges.map(edge => {
+      const sourceNodeResult = currentCandleCache[edge.source];
+      const isSignalTrue = typeof sourceNodeResult === 'boolean' ? sourceNodeResult : false;
+
+      return {
+        ...edge,
+        animated: isSignalTrue,
+        style: {
+          stroke: isSignalTrue ? '#22c55e' : '#ef4444', // green-500 or red-500
+          strokeWidth: isSignalTrue ? 3 : 2,
+        },
+      };
+    });
+
+    setEdges(newEdges);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChartIndex, activeBacktestResult]);
 
 
   return (
@@ -1079,30 +1123,33 @@ function StrategyEditorPage() {
                                 </div>
                                 <div className="w-full h-full">
                                     <ResponsiveContainer width="100%" height="80%">
-                                         <ComposedChart syncId="backtestChart" data={chartAndTradeData}>
+                                         <ComposedChart 
+                                            syncId="backtestChart" 
+                                            data={chartAndTradeData}
+                                            onMouseMove={(state) => {
+                                                if (state.isTooltipActive) {
+                                                    setActiveChartIndex(state.activeTooltipIndex ?? null);
+                                                } else {
+                                                    setActiveChartIndex(null);
+                                                }
+                                            }}
+                                            onMouseLeave={() => setActiveChartIndex(null)}
+                                         >
+                                            <YAxis yAxisId="right" orientation="right" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
+                                            <Line yAxisId="right" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
+                                            <Tooltip content={<CustomTooltip />} />
                                             <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
                                             <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                            <YAxis yAxisId="right" orientation="right" tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
-                                            <YAxis yAxisId="left" orientation="left" tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" />
-                                            <Tooltip content={<CustomTooltip />} />
-                                            <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                            
-                                            <Line yAxisId="right" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={1} dot={<TradeArrowDot />} activeDot={false} />
-                                            
-                                            {indicatorKeys.filter(k => !k.startsWith('MACD')).map((key, i) => (
-                                                <Line key={key} yAxisId="right" type="monotone" dataKey={key} name={key} stroke={`hsl(var(--chart-${(i+2)%5+1}))`} strokeWidth={1} dot={false} />
-                                            ))}
                                         </ComposedChart>
                                     </ResponsiveContainer>
-
                                     <ResponsiveContainer width="100%" height="20%">
-                                        <AreaChart syncId="backtestChart" data={chartAndTradeData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                                             <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
-                                             <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                             <YAxis yAxisId="left" orientation="left" tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                             <Tooltip content={<CustomTooltip />} />
+                                        <AreaChart syncId="backtestChart" data={activeBacktestResult.pnlData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                            <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
+                                            <YAxis yAxisId="left" orientation="left" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                            <Tooltip content={<CustomTooltip />} />
                                             <Area yAxisId="left" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" fillOpacity={0.3} />
-                                            <Brush dataKey="time" height={20} stroke="hsl(var(--primary))" travellerWidth={10} onChange={setBrushTimeframe}/>
+                                            <Brush dataKey="time" height={20} stroke="hsl(var(--primary))" travellerWidth={10} onChange={(e: any) => setActiveChartIndex(e.startIndex)} />
+                                            <XAxis dataKey="time" hide />
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
