@@ -391,7 +391,7 @@ const TradeArrowDot = ({ cx, cy, payload }: any) => {
   const color = isBuy ? '#22c55e' : '#ef4444'; // Tailwind green-500 and red-500
 
   // Position arrow slightly below for buy, slightly above for sell
-  const arrowY = isBuy ? (cy ?? 0) + 15 : (cy ?? 0) - 15;
+  const arrowY = isBuy ? (cy ?? 0) + 20 : (cy ?? 0) - 20;
   const finalCX = cx ?? 0;
 
   const points = isBuy
@@ -1071,7 +1071,7 @@ function StrategyEditorPage() {
                                     <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Kâr Faktörü</p><p className="text-lg font-bold">{activeBacktestResult.stats.profitFactor && isFinite(activeBacktestResult.stats.profitFactor) ? activeBacktestResult.stats.profitFactor.toFixed(2) : "∞"}</p></div>
                                 </div>
                                 <div className="w-full h-full">
-                                <ResponsiveContainer width="100%" height={(hasOscillator || hasMACD) ? "70%" : "100%"}>
+                                <ResponsiveContainer width="100%" height="80%">
                                     <ComposedChart data={chartAndTradeData} syncId="backtestChart">
                                         <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
                                         <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
@@ -1085,8 +1085,19 @@ function StrategyEditorPage() {
                                         {indicatorKeys.filter(k => !k.startsWith('RSI') && !k.startsWith('MACD')).map((key, index) => (<Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={["#facc15", "#38bdf8"][(index) % 2]} dot={false} strokeWidth={1.5} />))}
                                     </ComposedChart>
                                 </ResponsiveContainer>
-                                {hasOscillator && !hasMACD && (<ResponsiveContainer width="100%" height="30%"><ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}><CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/><XAxis dataKey="time" hide={true} /><YAxis yAxisId="indicator" orientation="right" tickCount={4} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" /><Tooltip content={<CustomTooltip />} /><ReferenceLine yAxisId="indicator" y={70} label={{value: "70", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" /><ReferenceLine yAxisId="indicator" y={30} label={{value: "30", position: 'insideRight', fill: 'rgba(255,255,255,0.5)', fontSize: 10}} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />{indicatorKeys.filter(k => k.startsWith('RSI')).map((key, index) => (<Line key={key} yAxisId="indicator" type="monotone" dataKey={key} stroke={["#eab308", "#3b82f6"][index % 2]} fillOpacity={0.2} name={key} dot={false}/>))}</ComposedChart></ResponsiveContainer>)}
-                                {hasMACD && (<ResponsiveContainer width="100%" height="30%"><ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{left: 0, right: 10, top: 20}}><CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/><XAxis dataKey="time" hide={true} /><YAxis yAxisId="macd" orientation="right" tickCount={5} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" /><Tooltip content={<CustomTooltip />} /><ReferenceLine yAxisId="macd" y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />{indicatorKeys.filter(k => k.includes('_Hist')).map((key) => (<Bar key={key} yAxisId="macd" dataKey={key} name="Histogram" >{chartAndTradeData.map((entry, i) => (<Cell key={`cell-${i}`} fill={(entry[key] ?? 0) > 0 ? '#22c55e' : '#ef4444'} />))}</Bar>))}{indicatorKeys.filter(k => k.includes('_MACD')).map((key) => (<Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="MACD" stroke="#3b82f6" dot={false}/>))}{indicatorKeys.filter(k => k.includes('_Signal')).map((key) => (<Line key={key} yAxisId="macd" type="monotone" dataKey={key} name="Signal" stroke="#f97316" dot={false}/>))}</ComposedChart></ResponsiveContainer>)}
+                                <ResponsiveContainer width="100%" height="20%">
+                                    <ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{top: 10, right: 10, left: 0, bottom: 20}}>
+                                         <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
+                                         <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                         <YAxis yAxisId="pnl" orientation="left" tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" />
+                                         <Tooltip content={<CustomTooltip />} />
+                                         <Brush dataKey="time" height={30} stroke="hsl(var(--primary))" travellerWidth={20} fill="rgba(0,0,0,0.4)">
+                                             <ComposedChart>
+                                                 <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
+                                             </ComposedChart>
+                                         </Brush>
+                                    </ComposedChart>
+                                </ResponsiveContainer>
                                 </div>
                             </div>
                             ) : (
