@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { BinanceAPI } from '@/lib/binance-api';
 
@@ -61,7 +62,10 @@ export async function POST(request: Request) {
     // Add specific error handling for code -2015 as requested
     if (typeof errorMessage === 'string' && errorMessage.includes('-2015')) {
       errorMessage = "Kimlik doğrulama hatası (Kod: -2015). Lütfen API anahtarınızın Spot Testnet için doğru izinlere sahip olduğundan ve IP kısıtlaması varsa sunucu IP'sinin eklendiğinden emin olun.";
+    } else if (typeof errorMessage === 'string' && errorMessage.includes('testnet/sandbox mode is not supported for futures')) {
+      errorMessage = "Futures Testnet yapılandırma hatası. CCXT kütüphanesi bu modu artık desteklemiyor. Lütfen geliştiriciyle iletişime geçin.";
     }
+
 
     return NextResponse.json(
       { success: false, message: errorMessage },

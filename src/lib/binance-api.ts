@@ -44,7 +44,8 @@ export class BinanceAPI {
 
     const isFutures = this.networkType === 'futures-testnet';
     const isSpotTestnet = this.networkType === 'spot-testnet';
-    const isTestnet = isFutures || isSpotTestnet;
+    
+    console.log(`[BinanceAPI] Initializing for network: ${this.networkType}`);
 
     const exchangeOptions: any = {
       apiKey: credentials.apiKey,
@@ -53,27 +54,21 @@ export class BinanceAPI {
         defaultType: isFutures ? 'future' : 'spot',
       },
     };
-    
-    // Explicitly set URLs for testnets to ensure correct endpoint routing.
-    if (isSpotTestnet) {
-      // For Spot Testnet, using sandboxMode is the most reliable way.
-      // We don't need to set the URL manually if sandboxMode is on for spot.
-    } else if (isFutures) {
-      // For Futures Testnet, sandboxMode is deprecated. We must set the URL directly.
-        exchangeOptions.urls = {
-            'api': 'https://testnet.binancefuture.com',
-        };
-    }
 
     this.exchange = new (ccxt as any).binance(exchangeOptions);
 
-    // IMPORTANT: Only enable sandbox mode for SPOT testnet.
-    // It is deprecated for FUTURES testnet and will cause errors.
+    // IMPORTANT: CCXT handles Spot Testnet via setSandboxMode.
+    // However, for Futures Testnet, sandbox mode is deprecated and will cause errors.
+    // We must NOT call setSandboxMode for futures.
     if (isSpotTestnet) {
-      this.exchange.setSandboxMode(true);
+      console.log('[BinanceAPI] Enabling sandbox mode for Spot Testnet.');
+      this.exchange.setSandboxMode(true); // This correctly points to testnet.binance.vision
+    } else if (isFutures) {
+      console.log('[BinanceAPI] Futures Testnet detected. Sandbox mode will NOT be enabled (deprecated).');
+       // The 'future' defaultType correctly targets the futures endpoints.
     }
     
-    console.log(`[BinanceAPI] Initialized for ${this.networkType}. Is Futures: ${isFutures}, Is Spot Testnet: ${isSpotTestnet}. API URL: ${JSON.stringify(this.exchange.urls.api)}`);
+    console.log(`[BinanceAPI] CCXT Initialized. Final API URL: ${JSON.stringify(this.exchange.urls.api)}`);
   }
 
   /**
@@ -121,6 +116,7 @@ export class BinanceAPI {
    */
   async getAccountInfo(): Promise<AccountInfo> {
     try {
+        console.log(`[BinanceAPI] Fetching account info for ${this.networkType}...`);
         const balanceInfo = await this.exchange.fetchBalance();
         const info = balanceInfo.info || {};
         
@@ -132,7 +128,7 @@ export class BinanceAPI {
         } as AccountInfo;
 
     } catch(error) {
-        console.error("[BinanceAPI] getAccountInfo Error:", error);
+        console.error(`[BinanceAPI] getAccountInfo Error on ${this.networkType}:`, error);
         if (error instanceof ccxt.AuthenticationError) {
             throw new Error(`Kimlik doğrulama hatası: ${error.message}`);
         }
