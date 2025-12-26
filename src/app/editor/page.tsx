@@ -1068,36 +1068,42 @@ function StrategyEditorPage() {
                                     <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam İşlem</p><p className="text-lg font-bold">{activeBacktestResult.stats.totalTrades}</p></div>
                                     <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Başarı Oranı</p><p className="text-lg font-bold">{(activeBacktestResult.stats.winRate || 0).toFixed(1)}%</p></div>
                                     <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam Komisyon</p><p className="text-lg font-bold">${(activeBacktestResult.stats.totalCommissions || 0).toFixed(2)}</p></div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Kâr Faktörü</p><p className="text-lg font-bold">{activeBacktestResult.stats.profitFactor && isFinite(activeBacktestResult.stats.profitFactor) ? activeBacktestResult.stats.profitFactor.toFixed(2) : "∞"}</p></div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3">
+                                        <p className="text-xs text-slate-400">Kâr Faktörü</p>
+                                        <p className="text-lg font-bold">
+                                            {activeBacktestResult.stats.profitFactor && isFinite(activeBacktestResult.stats.profitFactor)
+                                                ? activeBacktestResult.stats.profitFactor.toFixed(2)
+                                                : "∞"}
+                                        </p>
+                                    </div>
                                 </div>
                                 <div className="w-full h-full">
-                                <ResponsiveContainer width="100%" height="80%">
-                                    <ComposedChart data={chartAndTradeData} syncId="backtestChart">
-                                        <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
-                                        <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                        <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                        <YAxis yAxisId="pnl" orientation="left" tickFormatter={(val: number) => `$${val.toLocaleString()}`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" />
-                                        <YAxis yAxisId="price" orientation="right" tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
-                                        <Tooltip content={<CustomTooltip />} />
-                                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                        <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye (Maliyetler Sonrası)" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
-                                        <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
-                                        {indicatorKeys.filter(k => !k.startsWith('RSI') && !k.startsWith('MACD')).map((key, index) => (<Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={["#facc15", "#38bdf8"][(index) % 2]} dot={false} strokeWidth={1.5} />))}
-                                    </ComposedChart>
-                                </ResponsiveContainer>
-                                <ResponsiveContainer width="100%" height="20%">
-                                    <ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{top: 10, right: 10, left: 0, bottom: 20}}>
-                                         <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                         <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                         <YAxis yAxisId="pnl" orientation="left" tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" />
-                                         <Tooltip content={<CustomTooltip />} />
-                                         <Brush dataKey="time" height={30} stroke="hsl(var(--primary))" travellerWidth={20} fill="rgba(0,0,0,0.4)">
-                                             <ComposedChart>
-                                                 <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
-                                             </ComposedChart>
-                                         </Brush>
-                                    </ComposedChart>
-                                </ResponsiveContainer>
+                                    <ResponsiveContainer width="100%" height="80%">
+                                        <ComposedChart data={chartAndTradeData} syncId="backtestChart">
+                                            <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
+                                            <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                            <YAxis yAxisId="price" orientation="right" tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
+                                            <Tooltip content={<CustomTooltip />} />
+                                            <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                                            <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
+                                            {indicatorKeys.filter(k => !k.startsWith('RSI') && !k.startsWith('MACD')).map((key, index) => (<Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={["#facc15", "#38bdf8"][(index) % 2]} dot={false} strokeWidth={1.5} />))}
+                                        </ComposedChart>
+                                    </ResponsiveContainer>
+                                    <ResponsiveContainer width="100%" height="20%">
+                                        <ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{top: 10, right: 10, left: 0, bottom: 20}}>
+                                            <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
+                                            <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                            <YAxis yAxisId="pnl" orientation="left" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" />
+                                            <Tooltip content={<CustomTooltip />} />
+                                             <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
+                                            <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye (Maliyetler Sonrası)" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
+                                            <Brush dataKey="time" height={30} stroke="hsl(var(--primary))" travellerWidth={20} fill="rgba(0,0,0,0.4)">
+                                                <ComposedChart>
+                                                    <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
+                                                </ComposedChart>
+                                            </Brush>
+                                        </ComposedChart>
+                                    </ResponsiveContainer>
                                 </div>
                             </div>
                             ) : (
