@@ -1,5 +1,4 @@
 
-import crypto from 'crypto';
 import ccxt, { Exchange } from 'ccxt';
 
 export type OrderSide = 'BUY' | 'SELL';
@@ -46,21 +45,41 @@ export class BinanceAPI {
     const isFutures = this.networkType === 'futures-testnet';
     const isTestnet = this.networkType !== 'mainnet';
 
-    // Instantiate the exchange
-    this.exchange = new (ccxt as any).binance({
+    // Instantiate the exchange with specific URLs for testnets
+    const exchangeOptions: any = {
       apiKey: credentials.apiKey,
       secret: credentials.apiSecret,
       options: {
         defaultType: isFutures ? 'future' : 'spot',
       },
-    });
+    };
+    
+    // Explicitly set URLs for testnets to avoid ccxt default behavior issues
+    if (this.networkType === 'spot-testnet') {
+      exchangeOptions.urls = {
+        api: {
+          public: 'https://testnet.binance.vision/api',
+          private: 'https://testnet.binance.vision/api',
+        },
+      };
+    } else if (this.networkType === 'futures-testnet') {
+        exchangeOptions.urls = {
+            api: {
+                public: 'https://testnet.binancefuture.com/fapi',
+                private: 'https://testnet.binancefuture.com/fapi',
+            }
+        }
+    }
+
+
+    this.exchange = new (ccxt as any).binance(exchangeOptions);
 
     // Enable sandbox mode for all testnets
     if (isTestnet) {
       this.exchange.setSandboxMode(true);
     }
     
-    console.log(`[BinanceAPI] Initialized for ${this.networkType}. Sandbox: ${this.exchange.sandbox}. Default Type: ${this.exchange.options.defaultType}`);
+    console.log(`[BinanceAPI] Initialized for ${this.networkType}. Sandbox: ${this.exchange.sandbox}. Default Type: ${this.exchange.options.defaultType}. API URL: ${this.exchange.urls.api}`);
   }
 
   /**
@@ -108,17 +127,23 @@ export class BinanceAPI {
    */
   async getAccountInfo(): Promise<AccountInfo> {
     try {
-        const info = await this.exchange.fetchBalance();
-        // Manually shape the response to match the old AccountInfo structure for compatibility
+        // fetchBalance is the unified method for getting account info in ccxt
+        const balanceInfo = await this.exchange.fetchBalance();
+        const info = balanceInfo.info || {};
+        
         return {
-            ...info,
-            balances: info.free,
-            canTrade: (info.info as any).canTrade,
-            canWithdraw: (info.info as any).canWithdraw,
-            canDeposit: (info.info as any).canDeposit,
-        };
+            ...balanceInfo,
+            canTrade: info.canTrade,
+            canWithdraw: info.canWithdraw,
+            canDeposit: info.canDeposit,
+        } as AccountInfo;
+
     } catch(error) {
         console.error("[BinanceAPI] getAccountInfo Error:", error);
+        // Add more specific error handling if needed
+        if (error instanceof ccxt.AuthenticationError) {
+            throw new Error(`Kimlik doğrulama hatası: ${error.message}`);
+        }
         throw error;
     }
   }
@@ -129,7 +154,7 @@ export class BinanceAPI {
   async getBalances(): Promise<AccountBalance[]> {
     const balance = await this.exchange.fetchBalance();
     return Object.entries(balance.total)
-        .filter(([, total]) => total > 0)
+        .filter(([, total]) => total && total > 0)
         .map(([asset, total]) => ({
             asset,
             free: balance.free[asset]?.toString() || '0',
@@ -143,7 +168,7 @@ export class BinanceAPI {
    */
   async getBalance(asset: string): Promise<AccountBalance | null> {
     const balances = await this.exchange.fetchBalance();
-    if (balances.total[asset]) {
+    if (balances.total && balances.total[asset]) {
       return {
         asset,
         free: balances.free[asset]?.toString() || '0',
@@ -170,10 +195,18 @@ export class BinanceAPI {
    */
   async marketOrder(order: MarketOrder): Promise<BinanceOrderResponse> {
     const { symbol, side, quantity, quoteOrderQty } = order;
-    const amount = quantity || quoteOrderQty; // CCXT uses 'amount'
-    const orderType = quantity ? 'amount' : 'cost'; // let ccxt decide based on what's provided
+    
+    // For market buys, Binance requires quoteOrderQty (how much USDT to spend)
+    // For market sells, Binance requires quantity (how much crypto to sell)
+    // CCXT handles this with the 'amount' parameter, but we need to be explicit for clarity
+    const amount = side === 'BUY' ? quoteOrderQty : quantity;
+    const params = side === 'BUY' ? { 'quoteOrderQty': amount } : {};
 
-    return this.exchange.createMarketOrder(symbol, side.toLowerCase() as 'buy' | 'sell', amount, undefined, { [orderType]: amount });
+    if (!amount) {
+        throw new Error(`For a market ${side} order, you must provide ${side === 'BUY' ? 'quoteOrderQty' : 'quantity'}.`);
+    }
+
+    return this.exchange.createMarketOrder(symbol, side.toLowerCase() as 'buy' | 'sell', amount, undefined, params);
   }
 
   /**
