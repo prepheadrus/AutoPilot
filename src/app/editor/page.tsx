@@ -26,11 +26,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Scatter,
-  ReferenceLine,
-  Bar,
-  Cell,
-  Brush,
+  ReferenceArea,
 } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { RSI as RSICalculator, SMA as SMACalculator } from 'technicalindicators';
@@ -382,7 +378,9 @@ const runBacktestEngine = (
     return { ohlcData: finalChartData, tradeData: trades, pnlData, stats };
 };
 
-const TradeArrowDot = ({ cx, cy, payload }: any) => {
+const TradeArrowDot = (props: any) => {
+  const { cx, cy, payload } = props;
+
   if (!payload || !payload.tradeMarker) {
     return null;
   }
@@ -391,23 +389,22 @@ const TradeArrowDot = ({ cx, cy, payload }: any) => {
   const color = isBuy ? '#22c55e' : '#ef4444'; // Tailwind green-500 and red-500
 
   // Position arrow slightly below for buy, slightly above for sell
-  const arrowY = isBuy ? (cy ?? 0) + 20 : (cy ?? 0) - 20;
+  const arrowY = isBuy ? (cy ?? 0) + 15 : (cy ?? 0) - 15;
   const finalCX = cx ?? 0;
 
   const points = isBuy
-    ? `${finalCX},${arrowY - 7} ${finalCX - 6},${arrowY + 3} ${finalCX + 6},${arrowY + 3}` // Up arrow
-    : `${finalCX},${arrowY + 7} ${finalCX - 6},${arrowY - 3} ${finalCX + 6},${arrowY - 3}`; // Down arrow
+    ? `${finalCX - 5},${arrowY + 5} ${finalCX},${arrowY} ${finalCX + 5},${arrowY + 5}` // Up arrow below
+    : `${finalCX - 5},${arrowY - 5} ${finalCX},${arrowY} ${finalCX + 5},${arrowY - 5}`; // Down arrow above
+
 
   return (
-    <g>
-      <polygon
+    <polygon
         points={points}
         fill={color}
         stroke="#000"
         strokeWidth={0.5}
-        style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.5))' }}
+        style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))', pointerEvents: 'none' }}
       />
-    </g>
   );
 };
 
@@ -467,6 +464,14 @@ function StrategyEditorPage() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // States for zoom functionality
+  const [zoomDomain, setZoomDomain] = useState({});
+  const [refAreaLeft, setRefAreaLeft] = useState('');
+  const [refAreaRight, setRefAreaRight] = useState('');
+  const [refAreaTop, setRefAreaTop] = useState('');
+  const [refAreaBottom, setRefAreaBottom] = useState('');
+
 
   const dataSourceNodeSymbol = useMemo(() => {
     return nodes.find(n => n.type === 'dataSource')?.data.symbol || 'BTC/USDT';
@@ -894,12 +899,14 @@ function StrategyEditorPage() {
     setReportModalOpen(false);
     setActiveBacktestRun(null);
     setBacktestProgress(null);
+    setZoomDomain({}); // Reset zoom on close
     // Clear the reportId from URL to prevent re-opening on refresh
     router.replace('/editor', { scroll: false });
   }
 
   const handleSelectHistoryRun = (run: BacktestRun) => {
     setActiveBacktestRun(run);
+    setZoomDomain({}); // Reset zoom for new report
     // You might want to update nodes/edges here if the strategy was different
     // setNodes(run.nodes);
     // setEdges(run.edges);
@@ -922,19 +929,45 @@ function StrategyEditorPage() {
     });
   }, [activeBacktestResult]);
   
-  const indicatorKeys = useMemo(() => {
-    if (!activeBacktestResult || chartAndTradeData.length === 0) return [];
-    const firstDataPoint = chartAndTradeData[0];
-    return Object.keys(firstDataPoint).filter(key => key.includes('('));
-  }, [activeBacktestResult, chartAndTradeData]);
+  // --- START ZOOM LOGIC ---
   
-  const hasOscillator = useMemo(() => {
-    return indicatorKeys.some(key => key.startsWith('RSI'));
-  }, [indicatorKeys]);
+  const handleZoomMouseDown = (e: any) => {
+    if (!e || !e.activeLabel) return;
+    setRefAreaLeft(e.activeLabel);
+  };
   
-  const hasMACD = useMemo(() => {
-    return indicatorKeys.some(key => key.startsWith('MACD'));
-  }, [indicatorKeys]);
+  const handleZoomMouseMove = (e: any) => {
+    if (refAreaLeft && e && e.activeLabel) {
+      setRefAreaRight(e.activeLabel);
+    }
+  };
+
+  const handleZoomMouseUp = () => {
+    if (refAreaLeft && refAreaRight) {
+      const left = refAreaLeft;
+      const right = refAreaRight;
+      
+      const selectedData = chartAndTradeData.filter(d => d.time >= Math.min(left, right) && d.time <= Math.max(left, right));
+      if (selectedData.length > 0) {
+        const prices = selectedData.map(d => d.price);
+        const pnlValues = selectedData.map(d => d.pnl);
+        const newDomain = {
+          x: [left, right],
+          yPrice: [Math.min(...prices) * 0.99, Math.max(...prices) * 1.01],
+          yPnl: [Math.min(...pnlValues) * 0.99, Math.max(...pnlValues) * 1.01],
+        };
+        setZoomDomain(newDomain);
+      }
+    }
+    setRefAreaLeft('');
+    setRefAreaRight('');
+  };
+
+  const handleZoomOut = () => {
+    setZoomDomain({});
+  }
+
+  // --- END ZOOM LOGIC ---
 
   return (
     <div className="flex flex-1 flex-row overflow-hidden">
@@ -998,6 +1031,7 @@ function StrategyEditorPage() {
                     <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0">
                         <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu</h2>
                         <div className="flex items-center gap-2">
+                            {Object.keys(zoomDomain).length > 0 && <Button variant="outline" size="sm" onClick={handleZoomOut}><ZoomOut className="mr-2 h-4 w-4" />Zoom'u Sıfırla</Button>}
                             <Button variant="ghost" size="icon" onClick={closeReportModal}>
                                 <XIcon className="h-5 w-5"/>
                             </Button>
@@ -1022,7 +1056,7 @@ function StrategyEditorPage() {
                                                 <div className="flex justify-between font-semibold">
                                                     <span>{run.params.symbol}</span>
                                                     <span className={run.result.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}>
-                                                        {run.result.stats.netProfit >= 0 ? '+' : ''}{run.result.stats.netProfit.toFixed(2)}%
+                                                        {run.result.stats.netProfit >= 0 ? '+' : ''}{(run.result.stats.netProfit || 0).toFixed(2)}%
                                                     </span>
                                                 </div>
                                                 <p className="text-xs text-slate-400">{run.params.timeframe} | {format(new Date(run.params.dateRange.from), 'dd.MM.yy')} - {format(new Date(run.params.dateRange.to), 'dd.MM.yy')}</p>
@@ -1063,7 +1097,7 @@ function StrategyEditorPage() {
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                                     <div className="rounded-lg bg-slate-800/50 p-3">
                                         <p className="text-xs text-slate-400">Net Kâr</p>
-                                        <p className={`text-lg font-bold ${activeBacktestResult.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{activeBacktestResult.stats.netProfit.toFixed(2)}%</p>
+                                        <p className={`text-lg font-bold ${(activeBacktestResult.stats.netProfit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>{(activeBacktestResult.stats.netProfit || 0).toFixed(2)}%</p>
                                     </div>
                                     <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Toplam İşlem</p><p className="text-lg font-bold">{activeBacktestResult.stats.totalTrades}</p></div>
                                     <div className="rounded-lg bg-slate-800/50 p-3"><p className="text-xs text-slate-400">Başarı Oranı</p><p className="text-lg font-bold">{(activeBacktestResult.stats.winRate || 0).toFixed(1)}%</p></div>
@@ -1072,36 +1106,54 @@ function StrategyEditorPage() {
                                         <p className="text-xs text-slate-400">Kâr Faktörü</p>
                                         <p className="text-lg font-bold">
                                             {activeBacktestResult.stats.profitFactor && isFinite(activeBacktestResult.stats.profitFactor)
-                                                ? activeBacktestResult.stats.profitFactor.toFixed(2)
+                                                ? (activeBacktestResult.stats.profitFactor).toFixed(2)
                                                 : "∞"}
                                         </p>
                                     </div>
                                 </div>
-                                <div className="w-full h-full">
-                                    <ResponsiveContainer width="100%" height="80%">
-                                        <ComposedChart data={chartAndTradeData} syncId="backtestChart">
+                                <div className="w-full h-full" onDoubleClick={handleZoomOut}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <ComposedChart 
+                                            data={chartAndTradeData}
+                                            onMouseDown={handleZoomMouseDown}
+                                            onMouseMove={handleZoomMouseMove}
+                                            onMouseUp={handleZoomMouseUp}
+                                        >
                                             <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                            <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                            <YAxis yAxisId="price" orientation="right" tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
+                                            <XAxis 
+                                                dataKey="time" 
+                                                tick={{fontSize: 12}} 
+                                                stroke="rgba(255,255,255,0.4)" 
+                                                allowDataOverflow
+                                                domain={(zoomDomain as any).x || ['dataMin', 'dataMax']}
+                                            />
+                                            <YAxis 
+                                                yAxisId="price" 
+                                                orientation="right" 
+                                                tickFormatter={(val: number) => formatPrice(val)} 
+                                                tick={{fontSize: 12}} 
+                                                stroke="hsl(var(--accent))" 
+                                                allowDataOverflow
+                                                domain={(zoomDomain as any).yPrice || ['auto', 'auto']}
+                                            />
+                                            <YAxis 
+                                                yAxisId="pnl"
+                                                orientation="left"
+                                                domain={['dataMin', 'dataMax']}
+                                                tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`}
+                                                tick={{fontSize: 12}}
+                                                stroke="hsl(var(--primary))"
+                                                allowDataOverflow
+                                                domain={(zoomDomain as any).yPnl || ['auto', 'auto']}
+                                            />
                                             <Tooltip content={<CustomTooltip />} />
                                             <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                                            <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
+                                            <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
                                             <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={2} dot={<TradeArrowDot />} activeDot={false} />
-                                            {indicatorKeys.filter(k => !k.startsWith('RSI') && !k.startsWith('MACD')).map((key, index) => (<Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={["#facc15", "#38bdf8"][(index) % 2]} dot={false} strokeWidth={1.5} />))}
-                                        </ComposedChart>
-                                    </ResponsiveContainer>
-                                    <ResponsiveContainer width="100%" height="20%">
-                                        <ComposedChart data={chartAndTradeData} syncId="backtestChart" margin={{top: 10, right: 10, left: 0, bottom: 20}}>
-                                            <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                            <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                            <YAxis yAxisId="pnl" orientation="left" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" />
-                                            <Tooltip content={<CustomTooltip />} />
-                                             <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
-                                            <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye (Maliyetler Sonrası)" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
-                                            <Brush dataKey="time" height={30} stroke="hsl(var(--primary))" travellerWidth={20} fill="rgba(0,0,0,0.4)">
-                                                <ComposedChart>
-                                                    <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" />
-                                                </ComposedChart>
-                                            </Brush>
+                                             {refAreaLeft && refAreaRight && (
+                                              <ReferenceArea yAxisId="price" x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill="gray" fillOpacity={0.2} />
+                                            )}
                                         </ComposedChart>
                                     </ResponsiveContainer>
                                 </div>
