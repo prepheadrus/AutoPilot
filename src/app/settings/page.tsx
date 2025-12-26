@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from "react";
@@ -34,7 +35,6 @@ export default function SettingsPage() {
     // Exchange Keys State
     const [apiKey, setApiKey] = useState('');
     const [secretKey, setSecretKey] = useState('');
-    const [isTestnet, setIsTestnet] = useState(false); // Deprecated
     const [networkType, setNetworkType] = useState<'mainnet' | 'spot-testnet' | 'futures-testnet'>('mainnet');
     const [isTesting, setIsTesting] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
@@ -64,19 +64,15 @@ export default function SettingsPage() {
         try {
             const storedKeys = localStorage.getItem('exchangeKeys');
             if (storedKeys) {
-                const { apiKey: storedApiKey, secretKey: storedSecretKey, testnet, networkType: storedNetworkType } = JSON.parse(storedKeys);
+                const { apiKey: storedApiKey, secretKey: storedSecretKey, networkType: storedNetworkType } = JSON.parse(storedKeys);
                 if (storedApiKey) {
                     setApiKey(storedApiKey);
                     setIsConnected(true); // Assume connected if keys exist
                 }
                 if (storedSecretKey) setSecretKey(storedSecretKey);
 
-                // Load network type (backwards compatible with testnet boolean)
                 if (storedNetworkType) {
                     setNetworkType(storedNetworkType);
-                } else if (testnet !== undefined) {
-                    setIsTestnet(testnet);
-                    setNetworkType(testnet ? 'spot-testnet' : 'mainnet');
                 }
             }
         } catch (error) {
@@ -120,8 +116,6 @@ export default function SettingsPage() {
         toast({ title: "Bağlantı Test Ediliyor..." });
 
         try {
-            // NOTE: In a real app, this should be a dedicated API route.
-            // This is a simplified example.
             const response = await fetch('/api/test-keys', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -282,7 +276,7 @@ export default function SettingsPage() {
                                             <SelectItem value="futures-testnet">
                                                 <div className="flex flex-col">
                                                     <span className="font-medium">Futures Testnet</span>
-                                                    <span className="text-xs text-muted-foreground">testnet.binancefuture.com - Vadeli işlem testi</span>
+                                                    <span className="text-xs text-muted-foreground">demo.binance.com - Vadeli işlem testi</span>
                                                 </div>
                                             </SelectItem>
                                         </SelectContent>

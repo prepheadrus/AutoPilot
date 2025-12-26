@@ -55,6 +55,7 @@ export class BinanceAPI {
       },
     };
     
+    // Instantiate the exchange
     this.exchange = new (ccxt as any).binance(exchangeOptions);
 
     if (isSpotTestnet) {

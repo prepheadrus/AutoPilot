@@ -4,7 +4,7 @@ import { BinanceAPI } from '@/lib/binance-api';
 
 export async function POST(request: Request) {
   try {
-    const { apiKey, secretKey, testnet = false, networkType = 'mainnet' } = await request.json();
+    const { apiKey, secretKey, networkType = 'mainnet' } = await request.json();
 
     if (!apiKey || !secretKey) {
       return NextResponse.json(
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     let errorMessage = error.message || 'Bilinmeyen bir hata oluştu.';
 
     // Add specific error handling for common Binance errors
-    if (typeof errorMessage === 'string' && errorMessage.includes('-2015')) {
+    if (typeof errorMessage === 'string' && (errorMessage.includes('-2015') || errorMessage.includes('Invalid API-key'))) {
       errorMessage = "Kimlik doğrulama hatası (Kod: -2015). Lütfen API anahtarınızın doğru izinlere (özellikle Spot veya Futures için) sahip olduğundan ve IP kısıtlaması varsa sunucu IP'sinin eklendiğinden emin olun.";
     } else if (typeof errorMessage === 'string' && errorMessage.includes('-2008')) {
         errorMessage = `Geçersiz API Anahtarı (Kod: -2008). Lütfen girdiğiniz anahtarın doğru olduğundan emin olun.`
