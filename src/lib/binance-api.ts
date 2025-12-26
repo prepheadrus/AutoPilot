@@ -80,13 +80,12 @@ export class BinanceAPI {
       this.networkType = 'spot-testnet'; // Backwards compatibility
     }
 
-    // Set base URL based on network type
+    // Set base URL based on network type according to official docs
     switch (this.networkType) {
       case 'spot-testnet':
         this.baseUrl = 'https://testnet.binance.vision/api';
         break;
       case 'futures-testnet':
-        // Corrected futures testnet URL
         this.baseUrl = 'https://testnet.binancefuture.com/fapi';
         break;
       case 'mainnet':
@@ -100,21 +99,30 @@ export class BinanceAPI {
   
   private getEndpointPath(basePath: string): string {
     const isFutures = this.networkType === 'futures-testnet';
-    switch(basePath) {
-        case 'ping':
-            return isFutures ? '/v1/ping' : '/v3/ping';
-        case 'time':
-            return isFutures ? '/v1/time' : '/v3/time';
-        case 'account':
-            return isFutures ? '/v2/account' : '/v3/account';
-        case 'order':
-            return isFutures ? '/v1/order' : '/v3/order';
-        case 'openOrders':
-             return isFutures ? '/v1/openOrders' : '/v3/openOrders';
-        case 'ticker/price':
-            return isFutures ? '/v1/ticker/price' : '/v3/ticker/price';
-        default:
-            throw new Error(`Unknown API endpoint base path: ${basePath}`);
+    
+    // According to docs, spot-testnet uses the same v3 paths as mainnet
+    if (!isFutures) { // This covers 'mainnet' and 'spot-testnet'
+        switch(basePath) {
+            case 'ping': return '/v3/ping';
+            case 'time': return '/v3/time';
+            case 'account': return '/v3/account';
+            case 'order': return '/v3/order';
+            case 'openOrders': return '/v3/openOrders';
+            case 'ticker/price': return '/v3/ticker/price';
+            default:
+                throw new Error(`Unknown Spot API endpoint base path: ${basePath}`);
+        }
+    } else { // Futures endpoints
+         switch(basePath) {
+            case 'ping': return '/v1/ping';
+            case 'time': return '/v1/time';
+            case 'account': return '/v2/account'; // Futures uses v2 for account
+            case 'order': return '/v1/order';
+            case 'openOrders': return '/v1/openOrders';
+            case 'ticker/price': return '/v1/ticker/price';
+            default:
+                throw new Error(`Unknown Futures API endpoint base path: ${basePath}`);
+        }
     }
   }
 
@@ -187,7 +195,7 @@ export class BinanceAPI {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ msg: `HTTP Error: ${response.status} ${response.statusText}` }));
-      throw new Error(`Binance API Error: ${error.msg || error.code || 'Unknown error'}`);
+      throw new Error(`Binance API Error: ${error.msg || 'Invalid API-key, IP, or permissions for action.'}`);
     }
 
     return response.json();
