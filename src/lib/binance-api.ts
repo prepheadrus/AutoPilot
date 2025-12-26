@@ -1,5 +1,6 @@
 
 import crypto from 'crypto';
+import ccxt, { Exchange } from 'ccxt';
 
 export type OrderSide = 'BUY' | 'SELL';
 export type OrderType = 'MARKET' | 'LIMIT' | 'STOP_LOSS' | 'STOP_LOSS_LIMIT' | 'TAKE_PROFIT' | 'TAKE_PROFIT_LIMIT';
@@ -9,7 +10,6 @@ export type NetworkType = 'mainnet' | 'spot-testnet' | 'futures-testnet';
 export interface BinanceCredentials {
   apiKey: string;
   apiSecret: string;
-  testnet?: boolean; // Deprecated: use networkType instead
   networkType?: NetworkType;
 }
 
@@ -17,7 +17,7 @@ export interface MarketOrder {
   symbol: string;
   side: OrderSide;
   quantity?: number;
-  quoteOrderQty?: number; // For buying with USDT amount
+  quoteOrderQty?: number;
 }
 
 export interface LimitOrder extends MarketOrder {
@@ -25,180 +25,41 @@ export interface LimitOrder extends MarketOrder {
   timeInForce?: TimeInForce;
 }
 
-export interface BinanceOrderResponse {
-  symbol: string;
-  orderId: number;
-  clientOrderId: string;
-  transactTime: number;
-  price: string;
-  origQty: string;
-  executedQty: string;
-  cummulativeQuoteQty: string;
-  status: string;
-  type: string;
-  side: string;
-  fills?: Array<{
-    price: string;
-    qty: string;
-    commission: string;
-    commissionAsset: string;
-  }>;
-}
+export interface BinanceOrderResponse extends ccxt.Order {}
+export interface AccountBalance extends ccxt.Balance {}
+export interface AccountInfo extends ccxt.Account {}
 
-export interface AccountBalance {
-  asset: string;
-  free: string;
-  locked: string;
-}
-
-export interface AccountInfo {
-  balances: AccountBalance[];
-  canTrade: boolean;
-  canWithdraw: boolean;
-  canDeposit: boolean;
-}
 
 /**
- * Binance API Client
- * Supports Mainnet, Spot Testnet, and Futures Testnet
+ * Binance API Client powered by CCXT
+ * Supports Mainnet, Spot Testnet, and Futures Testnet by leveraging ccxt's sandbox mode.
  */
 export class BinanceAPI {
-  private apiKey: string;
-  private apiSecret: string;
-  private baseUrl: string;
-  private timeOffset: number = 0;
-  private timeSynced: boolean = false;
+  private exchange: Exchange;
   private networkType: NetworkType;
 
   constructor(credentials: BinanceCredentials) {
-    this.apiKey = credentials.apiKey;
-    this.apiSecret = credentials.apiSecret;
-
-    // Determine network type (backwards compatible with testnet boolean)
     this.networkType = credentials.networkType || 'mainnet';
-    if (!credentials.networkType && credentials.testnet) {
-      this.networkType = 'spot-testnet'; // Backwards compatibility
-    }
 
-    // Set base URL based on network type according to official docs
-    switch (this.networkType) {
-      case 'spot-testnet':
-        this.baseUrl = 'https://testnet.binance.vision/api';
-        break;
-      case 'futures-testnet':
-        this.baseUrl = 'https://testnet.binancefuture.com/fapi';
-        break;
-      case 'mainnet':
-      default:
-        this.baseUrl = 'https://api.binance.com/api';
-        break;
-    }
-
-    console.log(`[Binance API] Initialized with ${this.networkType} (${this.baseUrl})`);
-  }
-  
-  private getEndpointPath(basePath: string): string {
-    const isFutures = this.networkType === 'futures-testnet';
-    
-    // According to docs, spot-testnet uses the same v3 paths as mainnet
-    if (!isFutures) { // This covers 'mainnet' and 'spot-testnet'
-        switch(basePath) {
-            case 'ping': return '/v3/ping';
-            case 'time': return '/v3/time';
-            case 'account': return '/v3/account';
-            case 'order': return '/v3/order';
-            case 'openOrders': return '/v3/openOrders';
-            case 'ticker/price': return '/v3/ticker/price';
-            default:
-                throw new Error(`Unknown Spot API endpoint base path: ${basePath}`);
-        }
-    } else { // Futures endpoints
-         switch(basePath) {
-            case 'ping': return '/v1/ping';
-            case 'time': return '/v1/time';
-            case 'account': return '/v2/account'; // Futures uses v2 for account
-            case 'order': return '/v1/order';
-            case 'openOrders': return '/v1/openOrders';
-            case 'ticker/price': return '/v1/ticker/price';
-            default:
-                throw new Error(`Unknown Futures API endpoint base path: ${basePath}`);
-        }
-    }
-  }
-
-
-  /**
-   * Generate HMAC SHA256 signature for authenticated requests
-   */
-  private sign(queryString: string): string {
-    return crypto
-      .createHmac('sha256', this.apiSecret)
-      .update(queryString)
-      .digest('hex');
-  }
-
-  /**
-   * Sync local time with Binance server time
-   */
-  private async syncServerTime(): Promise<void> {
-    try {
-      const serverTime = await this.getServerTime();
-      const localTime = Date.now();
-      this.timeOffset = serverTime - localTime;
-      this.timeSynced = true;
-      console.log(`[Binance API] Time synced. Offset: ${this.timeOffset}ms`);
-    } catch (error) {
-      console.warn('[Binance API] Failed to sync time, using local time');
-      this.timeOffset = 0;
-      this.timeSynced = false;
-    }
-  }
-
-  /**
-   * Make authenticated request to Binance API
-   */
-  private async request<T>(
-    method: 'GET' | 'POST' | 'DELETE',
-    endpoint: string,
-    params: Record<string, any> = {},
-    signed: boolean = false
-  ): Promise<T> {
-    // Sync time with server if this is a signed request and we haven't synced yet
-    if (signed && !this.timeSynced) {
-      await this.syncServerTime();
-    }
-
-    const timestamp = Date.now() + this.timeOffset;
-    const queryParams = new URLSearchParams({
-      ...params,
-      ...(signed ? { timestamp: timestamp.toString() } : {}),
+    // Instantiate the exchange
+    this:ccxt.binance({
+      apiKey: credentials.apiKey,
+      secret: credentials.apiSecret,
     });
 
-    let queryString = queryParams.toString();
-
-    if (signed) {
-      const signature = this.sign(queryString);
-      queryString += `&signature=${signature}`;
+    // Enable sandbox mode for testnets
+    if (this.networkType === 'spot-testnet' || this.networkType === 'futures-testnet') {
+      this.exchange.setSandboxMode(true);
     }
 
-    const url = `${this.baseUrl}${endpoint}?${queryString}`;
-
-    const headers: HeadersInit = {
-      'X-MBX-APIKEY': this.apiKey,
-      'Content-Type': 'application/json',
-    };
-
-    const response = await fetch(url, {
-      method,
-      headers,
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ msg: `HTTP Error: ${response.status} ${response.statusText}` }));
-      throw new Error(`Binance API Error: ${error.msg || 'Invalid API-key, IP, or permissions for action.'}`);
+    // Set the default market type for futures
+    if (this.networkType === 'futures-testnet') {
+      this.exchange.options['defaultType'] = 'future';
+    } else {
+      this.exchange.options['defaultType'] = 'spot';
     }
 
-    return response.json();
+    console.log(`[BinanceAPI] Initialized for ${this.networkType}. Sandbox: ${this.exchange.sandbox}. Default Type: ${this.exchange.options.defaultType}`);
   }
 
   /**
@@ -206,13 +67,12 @@ export class BinanceAPI {
    */
   async ping(): Promise<boolean> {
     try {
-      const endpoint = this.getEndpointPath('ping');
-      await this.request('GET', endpoint);
-      console.log(`[Binance API] Ping successful on ${this.networkType}`);
+      await this.exchange.fetchTime();
+      console.log(`[BinanceAPI] Ping successful on ${this.networkType}`);
       return true;
     } catch (error: any) {
-      console.error(`[Binance API] Ping failed on ${this.networkType}:`, error.message);
-      return false;
+      console.error(`[BinanceAPI] Ping failed on ${this.networkType}:`, error.message);
+      throw error; // Re-throw to be caught by the caller
     }
   }
 
@@ -220,9 +80,7 @@ export class BinanceAPI {
    * Get server time
    */
   async getServerTime(): Promise<number> {
-    const endpoint = this.getEndpointPath('time');
-    const response = await this.request<{ serverTime: number }>('GET', endpoint);
-    return response.serverTime;
+    return this.exchange.fetchTime();
   }
 
   /**
@@ -232,12 +90,15 @@ export class BinanceAPI {
     try {
       const accountInfo = await this.getAccountInfo();
       if (accountInfo.canTrade) {
-        return { valid: true, message: 'API credentials are valid and trading is enabled.' };
+        return { valid: true, message: 'API anahtarları geçerli ve trading is enabled.' };
       } else {
-        return { valid: false, message: 'API credentials are valid but trading is disabled.' };
+        return { valid: false, message: 'API anahtarları geçerli fakat trading devre dışı.' };
       }
     } catch (error: any) {
-      return { valid: false, message: error.message || 'Invalid API credentials' };
+       if (error instanceof ccxt.AuthenticationError) {
+           return { valid: false, message: `Kimlik doğrulama hatası: ${error.message}` };
+       }
+      return { valid: false, message: error.message || 'Geçersiz API anahtarları' };
     }
   }
 
@@ -245,152 +106,95 @@ export class BinanceAPI {
    * Get account information
    */
   async getAccountInfo(): Promise<AccountInfo> {
-    const endpoint = this.getEndpointPath('account');
-    return this.request<AccountInfo>('GET', endpoint, {}, true);
+    try {
+        const info = await this.exchange.fetchBalance();
+        // Manually shape the response to match the old AccountInfo structure for compatibility
+        return {
+            ...info,
+            balances: info.free,
+            canTrade: (info.info as any).canTrade,
+            canWithdraw: (info.info as any).canWithdraw,
+            canDeposit: (info.info as any).canDeposit,
+        };
+    } catch(error) {
+        console.error("[BinanceAPI] getAccountInfo Error:", error);
+        throw error;
+    }
   }
 
   /**
    * Get account balances
    */
   async getBalances(): Promise<AccountBalance[]> {
-    const account = await this.getAccountInfo();
-    return account.balances.filter(b => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0);
+    const balance = await this.exchange.fetchBalance();
+    return Object.entries(balance.total)
+        .filter(([, total]) => total > 0)
+        .map(([asset, total]) => ({
+            asset,
+            free: balance.free[asset]?.toString() || '0',
+            used: balance.used[asset]?.toString() || '0',
+            total: total.toString(),
+        })) as unknown as AccountBalance[];
   }
 
   /**
    * Get balance for a specific asset
    */
   async getBalance(asset: string): Promise<AccountBalance | null> {
-    const balances = await this.getBalances();
-    return balances.find(b => b.asset === asset) || null;
+    const balances = await this.exchange.fetchBalance();
+    if (balances.total[asset]) {
+      return {
+        asset,
+        free: balances.free[asset]?.toString() || '0',
+        used: balances.used[asset]?.toString() || '0',
+        total: balances.total[asset].toString(),
+      } as unknown as AccountBalance;
+    }
+    return null;
   }
 
   /**
    * Get current price for a symbol
    */
   async getPrice(symbol: string): Promise<number> {
-    const endpoint = this.getEndpointPath('ticker/price');
-    const response = await this.request<{ price: string }>('GET', endpoint, { symbol });
-    return parseFloat(response.price);
+    const ticker = await this.exchange.fetchTicker(symbol);
+    if (!ticker.last) {
+      throw new Error(`Could not fetch price for ${symbol}`);
+    }
+    return ticker.last;
   }
 
   /**
    * Place a market order
    */
   async marketOrder(order: MarketOrder): Promise<BinanceOrderResponse> {
-    const endpoint = this.getEndpointPath('order');
-    const params: Record<string, any> = {
-      symbol: order.symbol,
-      side: order.side,
-      type: 'MARKET',
-    };
+    const { symbol, side, quantity, quoteOrderQty } = order;
+    const amount = quantity || quoteOrderQty; // CCXT uses 'amount'
+    const orderType = quantity ? 'amount' : 'cost'; // let ccxt decide based on what's provided
 
-    if (order.quantity) {
-      params.quantity = order.quantity;
-    } else if (order.quoteOrderQty) {
-      params.quoteOrderQty = order.quoteOrderQty;
-    } else {
-      throw new Error('Either quantity or quoteOrderQty must be specified');
-    }
-
-    return this.request<BinanceOrderResponse>('POST', endpoint, params, true);
+    return this.exchange.createMarketOrder(symbol, side.toLowerCase() as 'buy' | 'sell', amount, undefined, { [orderType]: amount });
   }
 
   /**
    * Place a limit order
    */
   async limitOrder(order: LimitOrder): Promise<BinanceOrderResponse> {
-    const endpoint = this.getEndpointPath('order');
-    if (!order.quantity) {
-      throw new Error('Quantity is required for limit orders');
-    }
-
-    const params: Record<string, any> = {
-      symbol: order.symbol,
-      side: order.side,
-      type: 'LIMIT',
-      quantity: order.quantity,
-      price: order.price,
-      timeInForce: order.timeInForce || 'GTC',
-    };
-
-    return this.request<BinanceOrderResponse>('POST', endpoint, params, true);
+     const { symbol, side, quantity, price } = order;
+     if (!quantity) throw new Error("Limit orders require a 'quantity'");
+     return this.exchange.createLimitOrder(symbol, side.toLowerCase() as 'buy' | 'sell', quantity, price);
   }
 
   /**
    * Cancel an order
    */
-  async cancelOrder(symbol: string, orderId: number): Promise<any> {
-    const endpoint = this.getEndpointPath('order');
-    return this.request('DELETE', endpoint, { symbol, orderId }, true);
+  async cancelOrder(symbol: string, orderId: string): Promise<any> {
+    return this.exchange.cancelOrder(orderId, symbol);
   }
 
   /**
    * Get open orders for a symbol
    */
-  async getOpenOrders(symbol?: string): Promise<any[]> {
-    const endpoint = this.getEndpointPath('openOrders');
-    const params = symbol ? { symbol } : {};
-    return this.request<any[]>('GET', endpoint, params, true);
-  }
-
-  /**
-   * Helper: Buy with USDT amount
-   */
-  async buyWithUSDT(symbol: string, usdtAmount: number): Promise<BinanceOrderResponse> {
-    return this.marketOrder({
-      symbol,
-      side: 'BUY',
-      quoteOrderQty: usdtAmount,
-    });
-  }
-
-  /**
-   * Helper: Sell all of an asset
-   */
-  async sellAll(symbol: string): Promise<BinanceOrderResponse> {
-    const baseAsset = symbol.replace('/USDT', '').replace('USDT', '');
-    const balance = await this.getBalance(baseAsset);
-
-    if (!balance || parseFloat(balance.free) === 0) {
-      throw new Error(`No ${baseAsset} balance to sell`);
-    }
-
-    return this.marketOrder({
-      symbol: symbol.replace('/', ''),
-      side: 'SELL',
-      quantity: parseFloat(balance.free),
-    });
-  }
-}
-
-/**
- * Create a Binance API client from stored credentials
- */
-export async function createBinanceClient(testnet: boolean = false): Promise<BinanceAPI | null> {
-  if (typeof window === 'undefined') {
-    // Server-side: credentials should be passed from API route
-    return null;
-  }
-
-  try {
-    const stored = localStorage.getItem('exchangeKeys');
-    if (!stored) return null;
-
-    const keys = JSON.parse(stored);
-    const credentials = testnet ? keys.binanceTestnet : keys.binance;
-
-    if (!credentials?.apiKey || !credentials?.apiSecret) {
-      return null;
-    }
-
-    return new BinanceAPI({
-      apiKey: credentials.apiKey,
-      apiSecret: credentials.apiSecret,
-      testnet,
-    });
-  } catch (error) {
-    console.error('Error creating Binance client:', error);
-    return null;
+  async getOpenOrders(symbol?: string): Promise<ccxt.Order[]> {
+    return this.exchange.fetchOpenOrders(symbol);
   }
 }
