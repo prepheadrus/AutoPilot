@@ -86,6 +86,7 @@ export class BinanceAPI {
         this.baseUrl = 'https://testnet.binance.vision/api';
         break;
       case 'futures-testnet':
+        // Corrected futures testnet URL
         this.baseUrl = 'https://testnet.binancefuture.com/fapi';
         break;
       case 'mainnet':
@@ -185,8 +186,8 @@ export class BinanceAPI {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ msg: 'Unknown error' }));
-      throw new Error(`Binance API Error: ${error.msg || error.code || response.statusText}`);
+      const error = await response.json().catch(() => ({ msg: `HTTP Error: ${response.status} ${response.statusText}` }));
+      throw new Error(`Binance API Error: ${error.msg || error.code || 'Unknown error'}`);
     }
 
     return response.json();
@@ -199,11 +200,10 @@ export class BinanceAPI {
     try {
       const endpoint = this.getEndpointPath('ping');
       await this.request('GET', endpoint);
-      console.log('[Binance API] Ping successful');
+      console.log(`[Binance API] Ping successful on ${this.networkType}`);
       return true;
     } catch (error: any) {
-      console.error('[Binance API] Ping failed:', error.message);
-      console.error('[Binance API] URL used for ping:', `${this.baseUrl}${this.getEndpointPath('ping')}`);
+      console.error(`[Binance API] Ping failed on ${this.networkType}:`, error.message);
       return false;
     }
   }
@@ -386,5 +386,3 @@ export async function createBinanceClient(testnet: boolean = false): Promise<Bin
     return null;
   }
 }
-
-    
