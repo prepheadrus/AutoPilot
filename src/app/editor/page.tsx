@@ -146,6 +146,12 @@ type BacktestResult = {
   };
 };
 
+type BacktestProgress = {
+    loaded: number;
+    total: number;
+    message: string;
+}
+
 const initialStrategyConfig: BotConfig = {
     mode: 'PAPER',
     stopLoss: 2.0,
@@ -433,13 +439,14 @@ function StrategyEditorPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isCompiling, setIsCompiling] = useState(false);
-  const [isBacktesting, setIsBacktesting] = useState(false);
+  const [backtestProgress, setBacktestProgress] = useState<BacktestProgress | null>(null);
   const [isReportModalOpen, setReportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [strategyConfig, setStrategyConfig] = useState<BotConfig>(initialStrategyConfig);
   
   const [backtestHistory, setBacktestHistory] = useState<BacktestRun[]>([]);
-  const [activeBacktestResult, setActiveBacktestResult] = useState<BacktestResult | null>(null);
+  const [activeBacktestRun, setActiveBacktestRun] = useState<BacktestRun | null>(null);
+  const activeBacktestResult = activeBacktestRun?.result || null;
   
   const [editingBotId, setEditingBotId] = useState<number | null>(null);
 
@@ -491,7 +498,7 @@ function StrategyEditorPage() {
             const history: BacktestRun[] = storedHistory ? JSON.parse(storedHistory) : [];
             const reportToLoad = history.find(run => run.id === Number(reportId));
             if (reportToLoad) {
-                setActiveBacktestResult(reportToLoad.result);
+                setActiveBacktestRun(reportToLoad);
                 setNodes(reportToLoad.nodes || initialNodes);
                 setEdges(reportToLoad.edges || initialEdges);
                 setReportModalOpen(true);
@@ -755,79 +762,138 @@ function StrategyEditorPage() {
     }
   };
   
-  const handleRunBacktest = async (values: BacktestFormValues) => {
-    setIsBacktesting(true);
-    setActiveBacktestResult(null); // Clear previous results to show loading state
-    toast({ title: "Backtest Başlatıldı", description: "Geçmiş veriler çekiliyor ve strateji simüle ediliyor..." });
+    const handleRunBacktest = async (values: BacktestFormValues) => {
+        setBacktestProgress({ loaded: 0, total: 0, message: "Başlatılıyor..." });
+        setActiveBacktestRun(null);
+        toast({ title: "Backtest Başlatıldı", description: "Geçmiş veriler çekiliyor ve strateji simüle ediliyor..." });
 
-    try {
-        const params = new URLSearchParams({
-            symbol: values.symbol,
-            timeframe: values.timeframe,
-            startDate: values.dateRange.from.toISOString(),
-            endDate: values.dateRange.to.toISOString(),
-        });
-        const response = await fetch(`/api/backtest-data?${params.toString()}`);
-        const data = await response.json();
-
-        if (!response.ok || !data.ohlcv || data.ohlcv.length === 0) {
-            throw new Error(data.error || 'Geçmiş veriler çekilemedi veya boş geldi.');
-        }
-
-        console.log(`Fetched ${data.ohlcv.length} candles for backtest.`);
+        const allCandles: any[] = [];
+        let currentSince = values.dateRange.from.getTime();
+        const endDate = values.dateRange.to.getTime();
         
-        const result = runBacktestEngine(data.ohlcv, nodes, edges, values.initialBalance, values.commission, values.slippage);
-        if ('error' in result) {
-            throw new Error(result.error);
+        const timeframeMap: Record<string, number> = { '1m': 60000, '5m': 300000, '15m': 900000, '1h': 3600000, '4h': 14400000, '1d': 86400000 };
+        const interval = timeframeMap[values.timeframe];
+        const totalCandles = Math.ceil((endDate - currentSince) / interval);
+        setBacktestProgress({ loaded: 0, total: totalCandles, message: "Veri çekiliyor..." });
+
+
+        try {
+            while (currentSince < endDate) {
+                const cacheKey = `backtest-data-${values.symbol}-${values.timeframe}-${currentSince}`;
+                let chunkData;
+                
+                try {
+                    const cachedChunk = localStorage.getItem(cacheKey);
+                    if (cachedChunk) {
+                        chunkData = JSON.parse(cachedChunk);
+                        console.log(`Cache hit for ${cacheKey}`);
+                    }
+                } catch (e) { console.error("Cache read error:", e); }
+
+
+                if (!chunkData) {
+                    const params = new URLSearchParams({
+                        symbol: values.symbol,
+                        timeframe: values.timeframe,
+                        since: new Date(currentSince).toISOString(),
+                    });
+                    const response = await fetch(`/api/backtest-data?${params.toString()}`);
+                    const data = await response.json();
+                    
+                    if (!response.ok || !data.ohlcv) {
+                        throw new Error(data.error || 'Geçmiş veri paketi çekilemedi.');
+                    }
+                    chunkData = data;
+                    try {
+                        localStorage.setItem(cacheKey, JSON.stringify(chunkData));
+                    } catch (e) { console.error("Cache write error:", e); }
+                }
+
+                if (chunkData.ohlcv.length === 0) {
+                    console.log("No more data from API, ending fetch loop.");
+                    break; 
+                }
+
+                allCandles.push(...chunkData.ohlcv);
+                
+                const loadedCount = allCandles.length;
+                setBacktestProgress(prev => ({ ...prev!, loaded: loadedCount, message: `Veri çekiliyor... ${loadedCount} / ${totalCandles} mum yüklendi.`}));
+
+
+                currentSince = chunkData.nextSince;
+                if (!currentSince) {
+                    break;
+                }
+            }
+            
+            if (allCandles.length === 0) {
+                 throw new Error('Belirtilen aralıkta hiç veri bulunamadı.');
+            }
+
+            setBacktestProgress(prev => ({ ...prev!, message: `Strateji ${allCandles.length} mum üzerinde test ediliyor...` }));
+            
+            // Allow UI to update before running heavy computation
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            const result = runBacktestEngine(allCandles, nodes, edges, values.initialBalance, values.commission, values.slippage);
+            if ('error' in result) {
+                throw new Error(result.error);
+            }
+
+            const newRun: BacktestRun = {
+                id: Date.now(),
+                params: values,
+                result: result,
+                nodes,
+                edges
+            };
+
+            setBacktestHistory(prev => [newRun, ...prev].slice(0, 50));
+            setActiveBacktestRun(newRun);
+
+        } catch (error) {
+            console.error("Backtest sırasında hata:", error);
+            const errorMessage = (error as Error).message;
+            toast({
+                title: 'Backtest Hatası',
+                description: errorMessage,
+                variant: 'destructive',
+            });
+        } finally {
+             setBacktestProgress(null);
         }
-
-        const newRun: BacktestRun = {
-            id: Date.now(),
-            params: values,
-            result: result,
-            nodes,
-            edges
-        };
-
-        setBacktestHistory(prev => [newRun, ...prev].slice(0, 50)); // Keep last 50 runs
-        setActiveBacktestResult(result);
-
-    } catch (error) {
-        console.error("Backtest sırasında hata:", error);
-        const errorMessage = (error as Error).message;
-        toast({
-            title: 'Backtest Hatası',
-            description: errorMessage,
-            variant: 'destructive',
-        });
-        // Ensure modal closes or shows an error state, not loading forever
-        setIsBacktesting(false);
-    } finally {
-        // This will now happen only on success, letting error handle its state
-        setIsBacktesting(false);
     }
-  }
+
 
   const handleConfigChange = (field: keyof BotConfig, value: any) => {
     setStrategyConfig(prev => ({...prev, [field]: value}));
   }
   
   const openBacktestModal = () => {
-    setActiveBacktestResult(null);
+    // Reset state before opening to ensure form is shown
+    setActiveBacktestRun(null);
+    setBacktestProgress(null);
     setReportModalOpen(true);
   }
 
   const closeReportModal = () => {
     setReportModalOpen(false);
-    setActiveBacktestResult(null);
+    setActiveBacktestRun(null);
+    setBacktestProgress(null);
     // Clear the reportId from URL to prevent re-opening on refresh
     router.replace('/editor', { scroll: false });
+  }
+
+  const handleSelectHistoryRun = (run: BacktestRun) => {
+    setActiveBacktestRun(run);
+    // You might want to update nodes/edges here if the strategy was different
+    // setNodes(run.nodes);
+    // setEdges(run.edges);
   }
 
   const chartAndTradeData = useMemo(() => {
     if (!activeBacktestResult) return [];
     
-    // Create a map of trades for efficient lookup
     const tradesMap = new Map();
     activeBacktestResult.tradeData.forEach(trade => {
         tradesMap.set(trade.timestamp, trade);
@@ -892,21 +958,21 @@ function StrategyEditorPage() {
             </ReactFlow>
 
             <div className="absolute top-4 right-4 z-10 flex gap-2">
-                <Button onClick={handleRunStrategy} disabled={isCompiling || isBacktesting}>
+                <Button onClick={handleRunStrategy} disabled={isCompiling || !!backtestProgress}>
                     {isCompiling ? (
                         <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Çalıştırılıyor...</>
                     ) : (
                         "Stratejiyi Test Et"
                     )}
                 </Button>
-                 <Button onClick={openBacktestModal} disabled={isCompiling || isBacktesting} className="bg-indigo-600 hover:bg-indigo-500 text-white">
+                 <Button onClick={openBacktestModal} disabled={isCompiling || !!backtestProgress} className="bg-indigo-600 hover:bg-indigo-500 text-white">
                     <Play className="mr-2 h-4 w-4" /> Backtest
                 </Button>
-                <Button variant="secondary" className="bg-slate-600 hover:bg-slate-500" onClick={() => setIsSettingsModalOpen(true)} disabled={isCompiling || isBacktesting}>
+                <Button variant="secondary" className="bg-slate-600 hover:bg-slate-500" onClick={() => setIsSettingsModalOpen(true)} disabled={isCompiling || !!backtestProgress}>
                     <Settings className="mr-2 h-4 w-4" />
                     Strateji Ayarları
                 </Button>
-                <Button variant="secondary" onClick={handleSaveStrategy} disabled={isCompiling || isBacktesting}>
+                <Button variant="secondary" onClick={handleSaveStrategy} disabled={isCompiling || !!backtestProgress}>
                     <Save className="mr-2 h-4 w-4" />
                     {editingBotId ? 'Değişiklikleri Kaydet' : 'Yeni Olarak Kaydet'}
                 </Button>
@@ -915,7 +981,7 @@ function StrategyEditorPage() {
         
         {isReportModalOpen && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-                <div className="w-[90vw] h-[90vh] flex flex-col rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
+                <div className="w-[95vw] h-[95vh] flex flex-col rounded-xl border border-slate-800 bg-slate-900/95 text-white shadow-2xl">
                     <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0">
                         <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu</h2>
                         <Button variant="ghost" size="icon" onClick={closeReportModal}>
@@ -923,7 +989,36 @@ function StrategyEditorPage() {
                         </Button>
                     </div>
                      <div className="flex flex-1 min-h-0">
-                        {!activeBacktestResult && !isBacktesting ? (
+                         <aside className="w-72 border-r border-slate-800 flex flex-col">
+                            <div className="p-4 border-b border-slate-800">
+                                <h3 className="font-semibold flex items-center gap-2"><History className="h-5 w-5"/>Geçmiş Testler</h3>
+                            </div>
+                            <div className="flex-1 overflow-y-auto">
+                                {backtestHistory.length === 0 && <p className="p-4 text-sm text-slate-500">Henüz backtest yapılmadı.</p>}
+                                <ul>
+                                    {backtestHistory.map(run => (
+                                        <li key={run.id}>
+                                            <button 
+                                                onClick={() => handleSelectHistoryRun(run)}
+                                                className={cn(
+                                                    "w-full text-left p-3 text-sm hover:bg-slate-800/50 transition-colors border-l-2 border-transparent",
+                                                    activeBacktestRun?.id === run.id && "bg-slate-800 border-primary"
+                                                )}>
+                                                <div className="flex justify-between font-semibold">
+                                                    <span>{run.params.symbol}</span>
+                                                    <span className={run.result.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                                        {run.result.stats.netProfit >= 0 ? '+' : ''}{run.result.stats.netProfit.toFixed(2)}%
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-slate-400">{run.params.timeframe} | {format(new Date(run.params.dateRange.from), 'dd.MM.yy')} - {format(new Date(run.params.dateRange.to), 'dd.MM.yy')}</p>
+                                                <p className="text-xs text-slate-500 mt-1">{format(new Date(run.id), 'dd MMMM yyyy, HH:mm')}</p>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                         </aside>
+                        {!activeBacktestResult && !backtestProgress ? (
                            <div className="p-6 w-full max-w-md mx-auto">
                                 <h3 className="font-semibold text-lg flex items-center gap-2 mb-6"><Settings className="h-5 w-5" />Backtest Ayarları</h3>
                                 <Form {...form}>
@@ -936,17 +1031,17 @@ function StrategyEditorPage() {
                                             <FormField control={form.control} name="commission" render={({ field }) => (<FormItem><FormLabel>Komisyon (%)</FormLabel><FormControl><Input type="number" step="0.001" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
                                             <FormField control={form.control} name="slippage" render={({ field }) => (<FormItem><FormLabel>Kayma (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} className="bg-slate-800 border-slate-700" /></FormControl><FormMessage /></FormItem>)}/>
                                         </div>
-                                        <Button type="submit" className="w-full" disabled={isBacktesting}>Backtest'i Başlat</Button>
+                                        <Button type="submit" className="w-full" disabled={!!backtestProgress}>Backtest'i Başlat</Button>
                                     </form>
                                 </Form>
                            </div>
                         ) : (
                         <main className="flex-1 min-h-0">
-                            {isBacktesting ? (
+                            {backtestProgress ? (
                                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
                                 <Loader2 className="h-12 w-12 animate-spin mb-4" />
-                                <h3 className="text-xl font-semibold">Backtest Çalıştırılıyor...</h3>
-                                <p className="text-slate-500 mt-2">Geçmiş veriler çekiliyor ve stratejiniz simüle ediliyor. Lütfen bekleyin.</p>
+                                <h3 className="text-xl font-semibold">{backtestProgress.message}</h3>
+                                {backtestProgress.total > 0 && <p className="text-slate-500 mt-2">{backtestProgress.loaded} / {backtestProgress.total} mum</p>}
                                 </div>
                             ) : activeBacktestResult ? (
                             <div className="p-4 md:p-6 flex-1 min-h-0 grid grid-rows-[auto,1fr] gap-6 h-full">
