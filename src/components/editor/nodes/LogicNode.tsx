@@ -40,7 +40,7 @@ export function LogicNode({ data, id }: NodeProps<{
             case 'AND':
             case 'OR':
                 return (
-                    <div className="p-3 text-center">
+                    <div className="p-4 text-center">
                         <p className="text-xl font-bold font-mono">{logicType}</p>
                     </div>
                 );
@@ -112,7 +112,7 @@ export function LogicNode({ data, id }: NodeProps<{
 
       <Handle type="target" id="a" position={Position.Left} className="!bg-purple-400 w-3 h-3 top-1/3" />
       {logicType !== 'compare' && <Handle type="target" id="b" position={Position.Left} className="!bg-purple-400 w-3 h-3 top-2/3" />}
-      <Handle type="source" position={Position.Right} className="!bg-purple-400 w-3 h-3" />
+      <Handle type="source" position={Position.Right} id="output" className="!bg-purple-400 w-3 h-3" />
     </div>
   );
 }

@@ -118,8 +118,8 @@ const initialEdges: Edge[] = [
   { id: 'ed1-4', source: 'd1', target: '4', markerEnd: { type: MarkerType.ArrowClosed } },
   { id: 'e1-2a', source: '1', target: '2a', markerEnd: { type: MarkerType.ArrowClosed } },
   { id: 'e4-2b', source: '4', target: '2b', markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: 'e2a-5', source: '2a', target: '5', markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: 'e2b-5', source: '2b', target: '5', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'e2a-5', source: '2a', target: '5', sourceHandle: 'output', targetHandle: 'a', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'e2b-5', source: '2b', target: '5', sourceHandle: 'output', targetHandle: 'b', markerEnd: { type: MarkerType.ArrowClosed } },
   { id: 'e5-3a', source: '5', target: '3a', markerEnd: { type: MarkerType.ArrowClosed } },
 ];
 
@@ -244,7 +244,6 @@ const runBacktestEngine = (
 
                 const { operator, value: thresholdValue, input: dataKey } = node.data;
                 
-                // Select the correct value from the indicator output (e.g., 'macd', 'histogram' or just the value itself)
                 const indicatorValue = (dataKey && typeof fullIndicatorValue === 'object') 
                     ? fullIndicatorValue[dataKey] 
                     : fullIndicatorValue;
@@ -295,7 +294,6 @@ const runBacktestEngine = (
     for (let i = 1; i < prices.length; i++) {
         const candle = ohlcv[i];
         
-        // --- Find Buy/Sell decisions by evaluating action nodes ---
         let shouldBuy = false;
         const buyActionNode = actionNodes.find(n => n.data.actionType === 'buy');
         if (buyActionNode) {
@@ -948,6 +946,9 @@ function StrategyEditorPage() {
             <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('logic', 'AND')}>
                 <GitBranch className="text-purple-500" /> VE (AND)
             </Button>
+             <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('logic', 'OR')}>
+                <GitBranch className="text-purple-500" /> VEYA (OR)
+            </Button>
             <Button variant="outline" className="justify-start gap-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-700" onClick={() => addNode('action')}>
                 <CircleDollarSign className="text-green-500" /> İşlem
             </Button>
@@ -1078,28 +1079,29 @@ function StrategyEditorPage() {
                                 </div>
                                 <div className="w-full h-full">
                                     <ResponsiveContainer width="100%" height="80%">
-                                        <ComposedChart data={chartAndTradeData} syncId="backtestChart" onMouseDown={(e) => {}} onMouseMove={(e) => {}} onMouseUp={() => {}}>
+                                         <ComposedChart syncId="backtestChart" data={chartAndTradeData}>
                                             <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
-                                            <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" allowDataOverflow domain={['dataMin', 'dataMax']} />
-                                            <YAxis yAxisId="price" orientation="right" tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" allowDataOverflow domain={['dataMin', 'dataMax']} />
-                                            <YAxis yAxisId="pnl" orientation="left" tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" allowDataOverflow domain={['dataMin', 'dataMax']} />
+                                            <XAxis dataKey="time" tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                            <YAxis yAxisId="right" orientation="right" tickFormatter={(val: number) => formatPrice(val)} tick={{fontSize: 12}} stroke="hsl(var(--accent))" />
+                                            <YAxis yAxisId="left" orientation="left" tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="hsl(var(--primary))" />
                                             <Tooltip content={<CustomTooltip />} />
                                             <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                            <Line yAxisId="price" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={1} dot={<TradeArrowDot />} activeDot={false} />
-                                            <Area yAxisId="pnl" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" fillOpacity={0.3} />
+                                            
+                                            <Line yAxisId="right" type="monotone" dataKey="price" name="Fiyat" stroke="hsl(var(--accent))" strokeWidth={1} dot={<TradeArrowDot />} activeDot={false} />
                                             
                                             {indicatorKeys.filter(k => !k.startsWith('MACD')).map((key, i) => (
-                                                <Line key={key} yAxisId="price" type="monotone" dataKey={key} name={key} stroke={`hsl(var(--chart-${(i+2)%5+1}))`} strokeWidth={1} dot={false} />
+                                                <Line key={key} yAxisId="right" type="monotone" dataKey={key} name={key} stroke={`hsl(var(--chart-${(i+2)%5+1}))`} strokeWidth={1} dot={false} />
                                             ))}
-                                            
                                         </ComposedChart>
                                     </ResponsiveContainer>
 
                                     <ResponsiveContainer width="100%" height="20%">
-                                        <AreaChart data={chartAndTradeData} syncId="backtestChart" margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                        <AreaChart syncId="backtestChart" data={chartAndTradeData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                              <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
-                                            <YAxis yAxisId="pnl" orientation="left" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
-                                            <Tooltip content={<CustomTooltip />} />
+                                             <CartesianGrid stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3"/>
+                                             <YAxis yAxisId="left" orientation="left" tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
+                                             <Tooltip content={<CustomTooltip />} />
+                                            <Area yAxisId="left" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" fillOpacity={0.3} />
                                             <Brush dataKey="time" height={20} stroke="hsl(var(--primary))" travellerWidth={10} onChange={setBrushTimeframe}/>
                                         </AreaChart>
                                     </ResponsiveContainer>
