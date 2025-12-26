@@ -51,7 +51,7 @@ export class BinanceAPI {
     if (this.networkType === 'futures-testnet') {
       console.log('[BinanceAPI] Configuring for Futures Testnet (demo-fapi.binance.com)');
       this.exchange.options['defaultType'] = 'future';
-      // CORRECTED: Point to the base fapi URL, let ccxt handle the versioning (v1/v2).
+      // CORRECTED: Point to the base fapi URL as an object, let ccxt handle the versioning (v1/v2).
       this.exchange.urls['api'] = {
         'public': 'https://demo-fapi.binance.com/fapi',
         'private': 'https://demo-fapi.binance.com/fapi',
@@ -119,7 +119,8 @@ export class BinanceAPI {
         }
 
         return {
-            ...info, 
+            ...info,
+            canTrade: info.canTrade,
         } as AccountInfo;
 
     } catch(error) {
