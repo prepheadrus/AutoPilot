@@ -21,6 +21,7 @@ import {
   Line,
   Bar,
   Area,
+  AreaChart,
   Brush,
   XAxis,
   YAxis,
