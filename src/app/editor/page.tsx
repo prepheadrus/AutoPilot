@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo, useEffect, Suspense } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, Suspense, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -25,7 +25,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Brush,
   ReferenceArea,
 } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
@@ -239,7 +238,7 @@ const runBacktestEngine = (
         let result = false;
         
         if (node.type === 'indicator') {
-             const indicatorValue = indicatorCache[nodeId]?.[candleIndex];
+             const indicatorValue = indicatorCache[node.id]?.[candleIndex];
              simulationCache[candleIndex][nodeId] = indicatorValue;
              result = false; // Indicator nodes themselves don't return a boolean signal
         } else if (node.type === 'action') {
@@ -476,7 +475,9 @@ function StrategyEditorPage() {
   const [isReportOpen, setReportOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [strategyConfig, setStrategyConfig] = useState<BotConfig>(initialStrategyConfig);
-  const [sheetHeight, setSheetHeight] = useState<'70%' | '40%'>('70%');
+  
+  const [sheetHeight, setSheetHeight] = useState(0);
+  const isResizing = useRef(false);
   
   const [backtestHistory, setBacktestHistory] = useState<BacktestRun[]>([]);
   const [activeBacktestRun, setActiveBacktestRun] = useState<BacktestRun | null>(null);
@@ -508,6 +509,34 @@ function StrategyEditorPage() {
       slippage: 0.05,
     }
   });
+
+  useEffect(() => {
+      setSheetHeight(window.innerHeight * 0.7);
+  }, []);
+
+  const handleResizePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
+
+  const handlePointerMove = useCallback((e: PointerEvent) => {
+    if (!isResizing.current) return;
+    setSheetHeight(prevHeight => {
+        const newHeight = prevHeight - e.movementY;
+        const minHeight = window.innerHeight * 0.2;
+        const maxHeight = window.innerHeight * 0.9;
+        return Math.max(minHeight, Math.min(newHeight, maxHeight));
+    });
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    isResizing.current = false;
+    window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('pointerup', handlePointerUp);
+  }, [handlePointerMove]);
+
 
   useEffect(() => {
     form.setValue('symbol', dataSourceNodeSymbol);
@@ -1026,19 +1055,20 @@ function StrategyEditorPage() {
          <Sheet open={isReportOpen} onOpenChange={(open) => !open && closeReportModal()}>
             <SheetContent 
               side="bottom" 
-              className={cn(
-                  "bg-slate-900/95 border-t border-slate-800 text-white p-0 flex flex-col transition-all duration-300 ease-in-out",
-                  sheetHeight === '70%' ? 'h-[70vh]' : 'h-[40vh]'
-              )}
+              style={{ height: `${sheetHeight}px` }}
+              className="bg-slate-900/95 border-t border-slate-800 text-white p-0 flex flex-col transition-none"
               overlayClassName="bg-transparent backdrop-blur-none"
               >
-                <SheetHeader className="p-4 border-b border-slate-800 shrink-0">
+                <div 
+                    onPointerDown={handleResizePointerDown}
+                    className="absolute top-0 left-0 right-0 h-2 cursor-row-resize flex items-center justify-center group"
+                >
+                    <div className="w-12 h-1 bg-slate-700 rounded-full group-hover:bg-primary transition-colors" />
+                </div>
+                <SheetHeader className="p-4 border-b border-slate-800 shrink-0 mt-2">
                     <div className="flex items-center justify-between">
                          <SheetTitle className="font-headline text-xl">Strateji Performans Raporu</SheetTitle>
                         <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => setSheetHeight(h => h === '70%' ? '40%' : '70%')}>
-                                <ChevronsUpDown className="h-5 w-5"/>
-                            </Button>
                             <Button variant="ghost" size="icon" onClick={closeReportModal}>
                                 <XIcon className="h-5 w-5"/>
                             </Button>
