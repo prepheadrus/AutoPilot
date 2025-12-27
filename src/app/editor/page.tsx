@@ -25,6 +25,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Brush,
+  ReferenceArea,
 } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { RSI as RSICalculator, SMA as SMACalculator } from 'technicalindicators';
@@ -37,7 +39,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from '@/components/ui/slider';
-import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, Database, Zap, CalendarIcon, History, AreaChart, ChevronsUpDown, Maximize } from 'lucide-react';
+import { Loader2, Rss, GitBranch, CircleDollarSign, Save, Play, Settings, X as XIcon, Database, Zap, CalendarIcon, History, AreaChart as AreaChartIcon, ChevronsUpDown, Maximize, ZoomOut } from 'lucide-react';
 import { IndicatorNode } from '@/components/editor/nodes/IndicatorNode';
 import { LogicNode } from '@/components/editor/nodes/LogicNode';
 import { ActionNode } from '@/components/editor/nodes/ActionNode';
@@ -226,7 +228,7 @@ const runBacktestEngine = (
     }
 
     const memo: { [key: string]: any } = {};
-
+    
     const evaluateNode = (nodeId: string, candleIndex: number): boolean => {
         const memoKey = `${nodeId}-${candleIndex}`;
         if (memo[memoKey] !== undefined) return memo[memoKey];
@@ -239,7 +241,14 @@ const runBacktestEngine = (
         if (node.type === 'indicator') {
              const indicatorValue = indicatorCache[nodeId]?.[candleIndex];
              simulationCache[candleIndex][nodeId] = indicatorValue;
-             result = false;
+             result = false; // Indicator nodes themselves don't return a boolean signal
+        } else if (node.type === 'action') {
+            const incomingEdge = edges.find(e => e.target === nodeId);
+            if (incomingEdge) {
+                result = evaluateNode(incomingEdge.source, candleIndex);
+            } else {
+                result = false;
+            }
         } else if (node.type === 'logic') {
             const { logicType } = node.data;
             const incomingEdges = edges.filter(e => e.target === nodeId);
@@ -247,6 +256,9 @@ const runBacktestEngine = (
             if (logicType === 'compare') {
                 const indicatorEdge = incomingEdges[0];
                 if (!indicatorEdge) return false;
+                
+                // This will recursively evaluate the source indicator node if it hasn't been.
+                evaluateNode(indicatorEdge.source, candleIndex); 
                 
                 const fullIndicatorValue = indicatorCache[indicatorEdge.source]?.[candleIndex];
                 if (fullIndicatorValue === undefined) return false;
@@ -273,8 +285,8 @@ const runBacktestEngine = (
             }
         }
         
-        memo[memoKey] = result;
         simulationCache[candleIndex][nodeId] = result;
+        memo[memoKey] = result;
         return result;
     };
 
@@ -294,31 +306,18 @@ const runBacktestEngine = (
     const actionNodes = nodes.filter(n => n.type === 'action');
 
     for (let i = 1; i < prices.length; i++) {
-        nodes.forEach(node => evaluateNode(node.id, i));
+        // This loop now just triggers the evaluation, which is cached.
+        actionNodes.forEach(node => evaluateNode(node.id, i));
         
         const candle = ohlcv[i];
-        
-        let shouldBuy = false;
-        const buyActionNode = actionNodes.find(n => n.data.actionType === 'buy');
-        if (buyActionNode) {
-            const buyEdge = edges.find(e => e.target === buyActionNode.id);
-            if (buyEdge) {
-                shouldBuy = simulationCache[i][buyEdge.source];
-                simulationCache[i][buyActionNode.id] = shouldBuy;
-            }
-        }
-
-        let shouldSell = false;
-        const sellActionNode = actionNodes.find(n => n.data.actionType === 'sell');
-        if (sellActionNode) {
-            const sellEdge = edges.find(e => e.target === sellActionNode.id);
-            if (sellEdge) {
-                shouldSell = simulationCache[i][sellEdge.source];
-                simulationCache[i][sellActionNode.id] = shouldSell;
-            }
-        }
-
         const currentPrice = candle[4];
+        
+        const buyActionNode = actionNodes.find(n => n.data.actionType === 'buy');
+        const shouldBuy = buyActionNode ? simulationCache[i][buyActionNode.id] : false;
+
+        const sellActionNode = actionNodes.find(n => n.data.actionType === 'sell');
+        const shouldSell = sellActionNode ? simulationCache[i][sellActionNode.id] : false;
+
         if (shouldBuy && !inPosition) {
             const buyPrice = currentPrice * (1 + slippageRate / 100);
             const commission = portfolioValue * (commissionRate / 100);
@@ -409,12 +408,14 @@ const TradeArrowDot = (props: any) => {
     const isBuy = payload.tradeMarker.type === 'buy';
     const color = isBuy ? '#22c55e' : '#ef4444'; 
     
+    // Position arrow above/below the high/low of the candle
     const arrowY = isBuy ? payload.low - Math.abs(payload.high-payload.low)*0.2 : payload.high + Math.abs(payload.high-payload.low)*0.2;
     const finalCX = cx ?? 0;
 
+    // A more pronounced triangle shape
     const points = isBuy
-        ? `${finalCX - 5},${arrowY + 5} ${finalCX},${arrowY} ${finalCX + 5},${arrowY + 5}`
-        : `${finalCX - 5},${arrowY - 5} ${finalCX},${arrowY} ${finalCX + 5},${arrowY - 5}`; 
+        ? `${finalCX - 5},${arrowY + 7} ${finalCX},${arrowY} ${finalCX + 5},${arrowY + 7}`
+        : `${finalCX - 5},${arrowY - 7} ${finalCX},${arrowY} ${finalCX + 5},${arrowY - 7}`; 
 
     return (
         <g>
@@ -484,7 +485,7 @@ function StrategyEditorPage() {
   const [editingBotId, setEditingBotId] = useState<number | null>(null);
 
   const [activeChartIndex, setActiveChartIndex] = useState<number | null>(null);
-  
+
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -642,12 +643,12 @@ function StrategyEditorPage() {
 
 
   const nodeTypes = useMemo(() => ({
-    indicator: (props: NodeProps) => <IndicatorNode {...props} data={{ ...props.data, onOptimize: handleOptimizePeriod }} />,
-    logic: LogicNode,
+    indicator: (props: NodeProps) => <IndicatorNode {...props} data={{ ...props.data, onOptimize: handleOptimizePeriod, activeIndex: activeChartIndex, simulationCache: activeBacktestResult?.simulationCache }} />,
+    logic: (props: NodeProps) => <LogicNode {...props} data={{...props.data, activeIndex: activeChartIndex, simulationCache: activeBacktestResult?.simulationCache}}/>,
     action: ActionNode,
     dataSource: DataSourceNode,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), []); 
+  }), [activeChartIndex, activeBacktestResult]); 
 
 
   const addNode = useCallback((type: string, logicType?: string) => {
@@ -927,35 +928,37 @@ function StrategyEditorPage() {
   }, [activeBacktestResult]);
   
   useEffect(() => {
-    if (!isReportOpen || !activeChartIndex || !activeBacktestResult?.simulationCache) {
-      setEdges((eds) => eds.map(edge => ({
-        ...edge,
-        animated: false,
-        style: { stroke: '#606b7d', strokeWidth: 2 },
-      })));
-      return;
+    if (!isReportOpen || activeChartIndex === null || !activeBacktestResult?.simulationCache) {
+        // Reset edges to default style if not hovering
+        setEdges((eds) => eds.map(edge => ({
+            ...edge,
+            animated: false,
+            style: { stroke: '#606b7d', strokeWidth: 2 },
+        })));
+        return;
     }
 
     const currentCandleCache = activeBacktestResult.simulationCache[activeChartIndex];
     if (!currentCandleCache) return;
 
     const newEdges = edges.map(edge => {
-      const sourceNodeResult = currentCandleCache[edge.source];
-      const isSignalTrue = typeof sourceNodeResult === 'boolean' ? sourceNodeResult : false;
+        const sourceNodeResult = currentCandleCache[edge.source];
+        const isSignalTrue = typeof sourceNodeResult === 'boolean' ? sourceNodeResult : false;
 
-      return {
-        ...edge,
-        animated: isSignalTrue,
-        style: {
-          stroke: isSignalTrue ? '#22c55e' : '#ef4444',
-          strokeWidth: isSignalTrue ? 3 : 2,
-        },
-      };
+        return {
+            ...edge,
+            animated: isSignalTrue,
+            style: {
+                stroke: isSignalTrue ? '#22c55e' : '#ef4444',
+                strokeWidth: isSignalTrue ? 3 : 2,
+                transition: 'stroke 0.2s ease-in-out' // Smooth color transition
+            },
+        };
     });
 
     setEdges(newEdges);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChartIndex, activeBacktestResult, isReportOpen]);
+  }, [activeChartIndex]);
 
 
   return (
@@ -1024,22 +1027,26 @@ function StrategyEditorPage() {
             <SheetContent 
               side="bottom" 
               className={cn(
-                  "bg-slate-900/95 border-slate-800 text-white p-0 flex flex-col transition-all duration-300 ease-in-out",
+                  "bg-slate-900/95 border-t border-slate-800 text-white p-0 flex flex-col transition-all duration-300 ease-in-out",
                   sheetHeight === '70%' ? 'h-[70vh]' : 'h-[40vh]'
               )}
-              overlayClassName="bg-black/20 backdrop-blur-none"
+              overlayClassName="bg-transparent backdrop-blur-none"
               >
-                <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0">
-                    <h2 className="text-xl font-headline font-semibold">Strateji Performans Raporu</h2>
-                    <div className="flex items-center gap-2">
-                         <Button variant="ghost" size="icon" onClick={() => setSheetHeight(h => h === '70%' ? '40%' : '70%')}>
-                            <ChevronsUpDown className="h-5 w-5"/>
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={closeReportModal}>
-                            <XIcon className="h-5 w-5"/>
-                        </Button>
+                <SheetHeader className="p-4 border-b border-slate-800 shrink-0">
+                    <div className="flex items-center justify-between">
+                         <SheetTitle className="font-headline text-xl">Strateji Performans Raporu</SheetTitle>
+                        <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => setSheetHeight(h => h === '70%' ? '40%' : '70%')}>
+                                <ChevronsUpDown className="h-5 w-5"/>
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={closeReportModal}>
+                                <XIcon className="h-5 w-5"/>
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                     <SheetDescription>Stratejinizin geçmiş performansını analiz edin ve sinyal akışını görsel olarak inceleyin.</SheetDescription>
+                </SheetHeader>
+
                  <div className="flex flex-1 min-h-0">
                      <aside className="w-72 border-r border-slate-800 flex flex-col">
                         <div className="p-4 border-b border-slate-800">
@@ -1115,7 +1122,7 @@ function StrategyEditorPage() {
                                 </div>
                             </div>
                             <div className="w-full h-full">
-                                <ResponsiveContainer width="100%" height="80%">
+                               <ResponsiveContainer width="100%" height="80%">
                                      <ComposedChart 
                                         syncId="backtestChart" 
                                         data={chartAndTradeData}
@@ -1136,13 +1143,13 @@ function StrategyEditorPage() {
                                     </ComposedChart>
                                 </ResponsiveContainer>
                                 <ResponsiveContainer width="100%" height="20%">
-                                    <AreaChart syncId="backtestChart" data={activeBacktestResult.pnlData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                    <ComposedChart syncId="backtestChart" data={activeBacktestResult.pnlData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                         <defs><linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/></linearGradient></defs>
                                         <YAxis yAxisId="left" orientation="left" domain={['dataMin', 'dataMax']} tickFormatter={(val: number) => `$${(val / 1000).toLocaleString()}k`} tick={{fontSize: 12}} stroke="rgba(255,255,255,0.4)" />
                                         <Tooltip content={<CustomTooltip />} />
                                         <Area yAxisId="left" type="monotone" dataKey="pnl" name="Net Bakiye" stroke="hsl(var(--primary))" fill="url(#colorPnl)" fillOpacity={0.3} />
                                         <XAxis dataKey="time" hide />
-                                    </AreaChart>
+                                    </ComposedChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
